@@ -1,0 +1,11 @@
+# 裁决策略表（ADR-0004）：参数即数据。业务可复制本文件自行维护，
+# 通过 ADJUDICATION_RULES_PATH 指向副本，不需要改代码发版。
+version: 1
+tiers:
+  A: { min_independent_sources: 1 }
+  B: { min_independent_sources: 1 }   # 可配置为 2（提高 B 级佐证门槛）
+  C: { min_independent_sources: 2 }
+  D: { min_independent_sources: 3 }
+value_tolerance:
+  relative: 0.05
+resolution_order: [tier, recency]

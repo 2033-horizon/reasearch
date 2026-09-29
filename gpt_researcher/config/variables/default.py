@@ -66,4 +66,12 @@ DEFAULT_CONFIG: BaseConfig = {
     "EVIDENCE_CONCURRENCY": 4,  # Concurrent extraction chunks
     "RELIABILITY_RULES_PATH": "",  # Empty -> packaged default rule table
     "TIER_CACHE_PATH": "data/tier_cache.json",  # LLM tier judgements cache
+
+    # Adjudication settings (phase 2; off by default so phase 1 behaviour stands)
+    "ADJUDICATION_ENABLED": False,  # Master switch: cluster + adjudicate evidence
+    "ADJUDICATION_RULES_PATH": "",  # Empty -> packaged default adjudication table
+    "EVIDENCE_DB_PATH": "data/evidence.db",  # SQLite evidence store ("" disables)
+    "ADJUDICATION_LLM": "fast",  # "fast" or "smart" LLM for merge/scope judgements
+    "ADJUDICATION_PENDING_BLOCKS_REPORT": False,  # True -> pending groups block the report body
+    "REPORT_PENDING_APPENDIX": True,  # Append pending groups to the report appendix
 }

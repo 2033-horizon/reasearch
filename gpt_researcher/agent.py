@@ -475,6 +475,25 @@ class GPTResearcher:
             metadata=event,
         )
 
+    async def _emit_adjudication_event(self, event: dict) -> None:
+        """Stream one clustering/adjudication progress event over the websocket."""
+        await stream_output(
+            "adjudication",
+            str(event.get("status") or "adjudication"),
+            event.get("message") or "",
+            self.websocket,
+            metadata=event,
+        )
+
+    def _add_adjudication_cost(self, cost: float) -> None:
+        """Attribute adjudication LLM spend to its own step for cost accounting."""
+        previous = self._current_step
+        self._current_step = "adjudication"
+        try:
+            self.add_costs(cost)
+        finally:
+            self._current_step = previous
+
     async def _run_evidence_layer(self) -> None:
         """Build the evidence artifact for this (top-level) research, if enabled.
 
@@ -492,7 +511,9 @@ class GPTResearcher:
             layer = EvidenceLayer(
                 self.cfg,
                 cost_callback=self.add_costs,
+                adjudication_cost_callback=self._add_adjudication_cost,
                 on_event=self._emit_evidence_event,
+                on_adjudication_event=self._emit_adjudication_event,
             )
             artifact = await layer.build(
                 self.research_sources,

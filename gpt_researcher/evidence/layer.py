@@ -12,8 +12,15 @@ from typing import Any, Awaitable, Callable
 
 from ..utils.domains import normalize_domain
 from ..utils.llm import create_chat_completion
+from .adjudication import AdjudicationRules, Adjudicator, JudgementCache
 from .extraction import EvidenceExtractor
-from .models import EvidenceArtifact, EvidenceItem, RejectedItem, SourceProfile
+from .models import (
+    SCHEMA_VERSION_ADJUDICATED,
+    EvidenceArtifact,
+    EvidenceItem,
+    RejectedItem,
+    SourceProfile,
+)
 from .tiering import TierClassifier, TierRules
 
 logger = logging.getLogger(__name__)
@@ -59,16 +66,31 @@ class EvidenceLayer:
         config: Any,
         *,
         llm: Callable[[str], Awaitable[str]] | None = None,
+        adjudication_llm: Callable[[str], Awaitable[str]] | None = None,
         rules_path: str | None = None,
         cache_path: str | None = None,
         cost_callback: Callable[[float], None] | None = None,
+        adjudication_cost_callback: Callable[[float], None] | None = None,
         on_event: EventCallback | None = None,
+        on_adjudication_event: EventCallback | None = None,
+        judgement_cache: Any | None = None,
     ):
         self.config = config
         self.cost_callback = cost_callback
+        self.adjudication_cost_callback = adjudication_cost_callback or cost_callback
         self.on_event = on_event
+        self.on_adjudication_event = on_adjudication_event
         self.llm = llm if llm is not None else self._build_default_llm()
         self.extractor_name = self._extractor_name()
+
+        if adjudication_llm is not None:
+            self.adjudication_llm = adjudication_llm
+        elif llm is not None:
+            self.adjudication_llm = llm
+        else:
+            self.adjudication_llm = self._build_default_llm(
+                "adjudication_llm", cost_callback=self.adjudication_cost_callback
+            )
 
         effective_rules_path = rules_path or _cfg(config, "reliability_rules_path", "") or None
         rules = TierRules.load(effective_rules_path)
@@ -83,8 +105,19 @@ class EvidenceLayer:
             extractor_name=self.extractor_name,
         )
 
-    def _llm_selection(self) -> tuple[str | None, str | None]:
-        level = str(_cfg(self.config, "evidence_llm", "fast") or "fast").strip().lower()
+        adjudication_rules_path = (
+            _cfg(config, "adjudication_rules_path", "") or None
+        )
+        self.adjudication_rules = AdjudicationRules.load(adjudication_rules_path)
+        self.adjudicator = Adjudicator(
+            self.adjudication_rules,
+            llm=self.adjudication_llm,
+            cache=judgement_cache if judgement_cache is not None else JudgementCache(),
+            on_event=self._emit_adjudication,
+        )
+
+    def _llm_selection(self, config_key: str = "evidence_llm") -> tuple[str | None, str | None]:
+        level = str(_cfg(self.config, config_key, "fast") or "fast").strip().lower()
         if level == "smart":
             return (
                 getattr(self.config, "smart_llm_provider", None),
@@ -99,13 +132,18 @@ class EvidenceLayer:
         provider, model = self._llm_selection()
         return f"{provider}:{model}" if provider and model else "unknown"
 
-    def _build_default_llm(self) -> Callable[[str], Awaitable[str]] | None:
-        provider, model = self._llm_selection()
+    def _build_default_llm(
+        self,
+        config_key: str = "evidence_llm",
+        cost_callback: Callable[[float], None] | None = None,
+    ) -> Callable[[str], Awaitable[str]] | None:
+        provider, model = self._llm_selection(config_key)
         if not provider or not model:
             return None
-        level = str(_cfg(self.config, "evidence_llm", "fast") or "fast").strip().lower()
+        level = str(_cfg(self.config, config_key, "fast") or "fast").strip().lower()
         token_key = "smart_token_limit" if level == "smart" else "fast_token_limit"
         max_tokens = int(_cfg(self.config, token_key, 4000) or 4000)
+        callback = cost_callback or self.cost_callback
 
         async def call(prompt: str) -> str:
             return await create_chat_completion(
@@ -114,7 +152,7 @@ class EvidenceLayer:
                 llm_provider=provider,
                 max_tokens=max_tokens,
                 llm_kwargs=getattr(self.config, "llm_kwargs", {}) or {},
-                cost_callback=self.cost_callback,
+                cost_callback=callback,
             )
 
         return call
@@ -126,6 +164,14 @@ class EvidenceLayer:
             await self.on_event(event)
         except Exception as exc:
             logger.warning("Evidence event callback failed: %s", exc)
+
+    async def _emit_adjudication(self, event: dict[str, Any]) -> None:
+        if not self.on_adjudication_event:
+            return
+        try:
+            await self.on_adjudication_event(event)
+        except Exception as exc:
+            logger.warning("Adjudication event callback failed: %s", exc)
 
     async def build(
         self,
@@ -188,6 +234,13 @@ class EvidenceLayer:
             evidence=evidence,
             rejected=rejected,
         )
+
+        # Phase 2 (ADR-0004/0005): cluster + adjudicate when the switch is on.
+        # Off (default) the artifact stays schema v1 and byte-for-byte the same.
+        if bool(_cfg(self.config, "adjudication_enabled", False)):
+            artifact.groups = await self.adjudicator.adjudicate(evidence, profiles)
+            artifact.schema_version = SCHEMA_VERSION_ADJUDICATED
+
         summary = artifact.summary
         await self._emit(
             {

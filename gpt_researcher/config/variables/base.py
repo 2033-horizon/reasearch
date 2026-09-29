@@ -59,3 +59,10 @@ class BaseConfig(TypedDict):
     EVIDENCE_CONCURRENCY: int
     RELIABILITY_RULES_PATH: str
     TIER_CACHE_PATH: str
+    # Adjudication settings (phase 2; off by default so phase 1 behaviour stands)
+    ADJUDICATION_ENABLED: bool
+    ADJUDICATION_RULES_PATH: str
+    EVIDENCE_DB_PATH: str
+    ADJUDICATION_LLM: str
+    ADJUDICATION_PENDING_BLOCKS_REPORT: bool
+    REPORT_PENDING_APPENDIX: bool

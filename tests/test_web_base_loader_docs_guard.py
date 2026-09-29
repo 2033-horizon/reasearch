@@ -68,6 +68,17 @@ def _load():
 
 
 class WebBaseLoaderDocsGuard(unittest.TestCase):
+    def setUp(self):
+        # _load() swaps sys.modules entries for stubs and the test mutates
+        # them while scraping; snapshot here and restore after each test so
+        # later test modules see the real gpt_researcher package again.
+        self._sys_modules_snapshot = dict(sys.modules)
+
+    def tearDown(self):
+        for name in [k for k in sys.modules if k not in self._sys_modules_snapshot]:
+            del sys.modules[name]
+        sys.modules.update(self._sys_modules_snapshot)
+
     def test_skips_none_docs_and_missing_page_content(self):
         mod, WebBaseLoader = _load()
         session = MagicMock()

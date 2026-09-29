@@ -11,6 +11,7 @@ MODULE_PATH = ROOT / "gpt_researcher" / "retrievers" / "openalex" / "openalex.py
 
 
 def _load():
+    real_requests = sys.modules.get("requests")
     requests_mod = types.ModuleType("requests")
     class RequestException(Exception):
         pass
@@ -25,7 +26,15 @@ def _load():
     )
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        # Restore the real module: leaving the stub in sys.modules broke every
+        # later test that talks to a requests-based retriever.
+        if real_requests is not None:
+            sys.modules["requests"] = real_requests
+        else:
+            sys.modules.pop("requests", None)
     return mod, requests_mod
 
 

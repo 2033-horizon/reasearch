@@ -13,6 +13,12 @@ MODULE_PATH = ROOT / "gpt_researcher" / "retrievers" / "duckduckgo" / "duckduckg
 def _load_duckduckgo_module():
     # Load the module file directly so we never import gpt_researcher package
     # (pulling json_repair and other heavy deps is unrelated to this unit).
+    #
+    # The stub is installed only for the duration of the load and the real
+    # module is restored afterwards: leaving the stub in sys.modules broke
+    # every later test that constructs Config (import_retrievers ->
+    # get_all_retriever_names lives in the real module).
+    real_utils = sys.modules.get("gpt_researcher.retrievers.utils")
     utils_mod = types.ModuleType("gpt_researcher.retrievers.utils")
     utils_mod.check_pkg = lambda *a, **k: None
     pkg = types.ModuleType("gpt_researcher")
@@ -26,7 +32,13 @@ def _load_duckduckgo_module():
     )
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        if real_utils is not None:
+            sys.modules["gpt_researcher.retrievers.utils"] = real_utils
+        else:
+            sys.modules.pop("gpt_researcher.retrievers.utils", None)
     return mod
 
 

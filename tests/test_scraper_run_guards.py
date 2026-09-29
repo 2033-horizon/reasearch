@@ -18,6 +18,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 def _load_scraper_module():
     # Minimal stubs so scraper.py imports without the full gptr stack.
     root = Path(__file__).resolve().parents[1]
+    real_utils_pkg = sys.modules.get("gpt_researcher.utils")
+    real_requests = sys.modules.get("requests")
+    real_session = getattr(real_requests, "Session", None)
     pkg = types.ModuleType("gpt_researcher")
     pkg.__path__ = [str(root / "gpt_researcher")]
     sys.modules.setdefault("gpt_researcher", pkg)
@@ -78,7 +81,18 @@ def _load_scraper_module():
         "WebBaseLoaderScraper",
     ):
         setattr(sp, name, object)
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        # Restore what the stubs replaced: leaving a non-package
+        # `gpt_researcher.utils` (and a mocked requests.Session) in
+        # sys.modules broke unrelated tests later in the same run.
+        if real_utils_pkg is not None:
+            sys.modules["gpt_researcher.utils"] = real_utils_pkg
+        else:
+            sys.modules.pop("gpt_researcher.utils", None)
+        if real_requests is not None and real_session is not None:
+            real_requests.Session = real_session
     return mod
 
 

@@ -13,8 +13,10 @@ conservative repost merging and conflict resolution on top.
 
 from __future__ import annotations
 
+import difflib
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -28,6 +30,7 @@ from .models import (
     EvidenceItem,
     SourceProfile,
 )
+from .parsing import parse_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +47,54 @@ DEFAULT_RESOLUTION_ORDER = ("tier", "recency")
 _TIER_RANK = {"A": 0, "B": 1, "C": 2, "D": 3}
 _UNKNOWN_RANK = len(_TIER_RANK)
 
+REPOST_SIMILARITY = 0.9
+REPOST_UNCERTAIN_SIMILARITY = 0.75
+
+_ATTRIBUTION_RE = re.compile(r"(?:来源|转自|摘自|据)\s*[:：]?\s*([\u4e00-\u9fffA-Za-z0-9.]{2,30})")
+
 EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 LLMCall = Callable[[str], Awaitable[str]]
 
 
+def build_metric_synonym_prompt(metric_a: str, metric_b: str) -> str:
+    return (
+        "你是市场调研的指标归并助手（指标归并）。判断下面两个指标名是否为同一"
+        "指标的近义表述（如“销量”与“销售量”）。统计对象、口径不同的指标不得归并；"
+        "数值接近不能作为归并理由。\n"
+        '只输出 JSON：{"same": true 或 false, "reason": "简短依据"}\n'
+        f"指标A：{metric_a}\n"
+        f"指标B：{metric_b}\n"
+    )
+
+
+def build_scope_relation_prompt(scope_a: str | None, scope_b: str | None) -> str:
+    return (
+        "你是市场调研的口径判定助手（口径判定）。判断两个统计口径的关系：\n"
+        "same（同一口径）/ compatible（兼容，可合并）/ different（不同，不能合并）。\n"
+        '只输出 JSON：{"relation": "same|compatible|different", "reason": "简短依据"}\n'
+        f"口径A：{scope_a or '（无）'}\n"
+        f"口径B：{scope_b or '（无）'}\n"
+    )
+
+
+def build_text_relation_prompt(text_a: str, text_b: str) -> str:
+    return (
+        "你是市场调研的事实一致性判定助手（事实判定）。判断两条文本型事实的关系：\n"
+        "same（同一事实的近义表述）/ conflict（语义冲突，如“已完成”与“计划中”）/ "
+        "different（描述不同且不冲突）。\n"
+        '只输出 JSON：{"relation": "same|conflict|different", "reason": "简短依据"}\n'
+        f"事实A：{text_a}\n"
+        f"事实B：{text_b}\n"
+    )
+
+
 def _norm(text: Any) -> str:
     return fold_text(str(text or "")).casefold()
+
+
+def scope_or_none(value: Any) -> str | None:
+    text = str(value).strip() if value is not None else ""
+    return text or None
 
 
 def _period_key(period: dict[str, Any] | None) -> str:
@@ -288,28 +333,26 @@ class Adjudicator:
         for item in sorted(block, key=lambda entry: entry.id):
             bucket = None
             for candidate in buckets:
-                if await self._same_metric(item.metric, candidate["metrics"]):
+                matched, entry = await self._match_metric(item.metric, candidate["metrics"])
+                if matched is not None:
                     bucket = candidate
+                    if entry is not None:
+                        bucket["log"].append(entry)
                     break
             if bucket is None:
                 bucket = {"metrics": [item.metric], "log": []}
                 buckets.append(bucket)
             elif _norm(item.metric) not in {_norm(m) for m in bucket["metrics"]}:
-                bucket["log"].append(
-                    {
-                        "type": "metric_merged",
-                        "detail": f"“{item.metric}”并入“{bucket['metrics'][0]}”",
-                        "by": "llm",
-                    }
-                )
+                bucket["metrics"].append(item.metric)
 
             partitions = bucket.setdefault("partitions", [])
-            for partition in partitions:
-                if await self._same_scope(item.scope, partition["scope"]):
-                    partition["items"].append(item)
-                    break
-            else:
+            partition, logs = await self._find_partition(item.scope, partitions)
+            for entry in logs:
+                bucket["log"].append(entry)
+            if partition is None:
                 partitions.append({"scope": item.scope, "items": [item]})
+            else:
+                partition["items"].append(item)
 
         groups: list[EvidenceGroup] = []
         for bucket in buckets:
@@ -317,14 +360,104 @@ class Adjudicator:
                 groups.append(self._new_group(partition["items"], bucket["log"]))
         return groups
 
-    async def _same_metric(self, metric: str, existing: list[str]) -> bool:
-        """Baseline: exact normalized match only (ticket 08 adds LLM synonyms)."""
-        normalized = _norm(metric)
-        return any(normalized == _norm(other) for other in existing)
+    async def _find_partition(
+        self,
+        scope: str | None,
+        partitions: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+        """Match a scope to an existing partition; exact text first, then LLM.
 
-    async def _same_scope(self, scope: str | None, existing: str | None) -> bool:
-        """Baseline: identical scope text (or both empty) merges; else splits."""
-        return _norm(scope) == _norm(existing)
+        Returns the matched partition (or None) and merge/split log entries.
+        """
+        normalized = _norm(scope)
+        for partition in partitions:
+            if normalized == _norm(partition["scope"]):
+                return partition, []
+
+        logs: list[dict[str, Any]] = []
+        if self.llm is None:
+            return None, logs
+        for partition in partitions:
+            other = partition["scope"]
+            key = "|".join(sorted([normalized, _norm(other)]))
+            result, from_cache = await self._judge(
+                "scope_relation", key, build_scope_relation_prompt(scope, other)
+            )
+            relation = str((result or {}).get("relation") or "").lower()
+            if relation in {"same", "compatible"}:
+                logs.append(
+                    {
+                        "type": "scope_merged",
+                        "scopes": [scope_or_none(scope), scope_or_none(other)],
+                        "relation": relation,
+                        "by": "cache" if from_cache else "llm",
+                        "reason": str((result or {}).get("reason") or ""),
+                    }
+                )
+                return partition, logs
+            if relation == "different":
+                logs.append(
+                    {
+                        "type": "scope_split",
+                        "scopes": [scope_or_none(scope), scope_or_none(other)],
+                        "relation": "different",
+                        "by": "cache" if from_cache else "llm",
+                        "reason": str((result or {}).get("reason") or ""),
+                    }
+                )
+        return None, logs
+
+    async def _match_metric(
+        self, metric: str, existing: list[str]
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Exact normalized match first, then cached LLM synonym judgements.
+
+        Returns the matched metric and an optional audit entry.
+        """
+        normalized = _norm(metric)
+        for other in existing:
+            if normalized == _norm(other):
+                return other, None
+        if self.llm is None:
+            return None, None
+        for other in existing:
+            key = "|".join(sorted([normalized, _norm(other)]))
+            result, from_cache = await self._judge(
+                "metric_synonym", key, build_metric_synonym_prompt(metric, other)
+            )
+            if (result or {}).get("same") is True:
+                return other, {
+                    "type": "metric_merged",
+                    "metrics": [metric, other],
+                    "by": "cache" if from_cache else "llm",
+                    "reason": str((result or {}).get("reason") or ""),
+                }
+        return None, None
+
+    async def _judge(
+        self, kind: str, key: str, prompt: str
+    ) -> tuple[dict[str, Any] | None, bool]:
+        """Return (judgement, from_cache); caches successful LLM judgements."""
+        cached = self.cache.get(kind, key) if self.cache is not None else None
+        if isinstance(cached, dict):
+            return cached, True
+        if self.llm is None:
+            return None, False
+        try:
+            response = await self.llm(prompt)
+        except Exception as exc:
+            logger.warning("Adjudication LLM call failed (%s): %s", kind, exc)
+            return None, False
+        parsed = parse_json_object(response)
+        if not parsed:
+            return None, False
+        result = {"by": "llm", **parsed}
+        if self.cache is not None:
+            try:
+                self.cache.set(kind, key, result)
+            except Exception as exc:
+                logger.warning("Failed to cache adjudication judgement: %s", exc)
+        return result, False
 
     def _new_group(
         self, items: list[EvidenceItem], merge_log: list[dict[str, Any]]
@@ -365,28 +498,40 @@ class Adjudicator:
             group.independent_sources = 0
             return
 
-        clusters = self._value_clusters(items)
+        clusters = await self._value_clusters(items)
         resolution: str | None = None
         conflicts: list[dict[str, Any]] = []
+        winner: list[EvidenceItem] | None = None
         if len(clusters) <= 1:
             winner = clusters[0]
         else:
-            winner, resolution = self._resolve_conflict(clusters, source_by_id)
             conflicts = [
                 {
                     "members": [item.id for item in cluster],
                     "values": [item.value_raw or item.value for item in cluster],
                 }
                 for cluster in clusters
-                if cluster is not winner
             ]
+            # Text facts never resolve through tier/recency: a semantic
+            # conflict ("已完成" vs "计划中") always goes to human review.
+            if any(item.value_type == "text" for item in items):
+                winner, resolution = None, None
+            else:
+                winner, resolution = self._resolve_conflict(clusters, source_by_id)
+                if winner is not None:
+                    conflicts = [entry for entry in conflicts if entry["members"] != [item.id for item in winner]]
+
+        # Repost log covers every member of the group for audit; the verdict
+        # count is computed over the winning cluster only.
+        _, repost_log = self._independent_sources(items, source_by_id)
+        group.merge_log.extend(repost_log)
         if winner is None:
-            group.independent_sources = self._independent_sources(items, source_by_id)
+            group.independent_sources, _ = self._independent_sources(items, source_by_id)
             group.representative = self._pick_representative(items, source_by_id)
             group.verdict = {
                 "status": VERDICT_CONFLICT_PENDING,
                 "rule": "resolution:unresolved",
-                "reason": "数值超出容差且等级与时效均无法裁定，进入待审",
+                "reason": "数值或语义冲突且等级与时效均无法裁定，进入待审",
                 "resolution": None,
                 "conflicts": conflicts,
                 "values": _unique(
@@ -395,7 +540,7 @@ class Adjudicator:
             }
             return
 
-        independent = self._independent_sources(winner, source_by_id)
+        independent, _ = self._independent_sources(winner, source_by_id)
         group.independent_sources = independent
         group.representative = self._pick_representative(winner, source_by_id)
 
@@ -442,18 +587,18 @@ class Adjudicator:
             )
         group.verdict = verdict
 
-    def _value_clusters(self, items: list[EvidenceItem]) -> list[list[EvidenceItem]]:
+    async def _value_clusters(self, items: list[EvidenceItem]) -> list[list[EvidenceItem]]:
         clusters: list[list[EvidenceItem]] = []
         for item in items:
             for cluster in clusters:
-                if self._values_consistent(item, cluster[0]):
+                if await self._values_consistent(item, cluster[0]):
                     cluster.append(item)
                     break
             else:
                 clusters.append([item])
         return clusters
 
-    def _values_consistent(self, left: EvidenceItem, right: EvidenceItem) -> bool:
+    async def _values_consistent(self, left: EvidenceItem, right: EvidenceItem) -> bool:
         if left.value_type != right.value_type:
             return False
         left_numbers = _numeric_values(left.value)
@@ -465,7 +610,19 @@ class Adjudicator:
                 _within_tolerance([a, b], self.rules.tolerance)
                 for a, b in zip(left_numbers, right_numbers)
             )
-        return _norm(left.value) == _norm(right.value)
+        if _norm(left.value) == _norm(right.value):
+            return True
+        # Text facts: near-synonym phrasing counts as the same fact; anything
+        # else stays a conflict (LLM-judged, cached, conservative on failure).
+        if left.value_type == "text" and self.llm is not None:
+            key = "|".join(sorted([_norm(left.value), _norm(right.value)]))
+            result, _ = await self._judge(
+                "text_relation",
+                key,
+                build_text_relation_prompt(str(left.value), str(right.value)),
+            )
+            return str((result or {}).get("relation") or "").lower() == "same"
+        return False
 
     def _resolve_conflict(
         self,
@@ -497,19 +654,112 @@ class Adjudicator:
                     return winners[0], "recency"
         return None, None
 
+    def _publisher_key(
+        self, item: EvidenceItem, source_by_id: dict[str, SourceProfile]
+    ) -> str:
+        source = source_by_id.get(item.source_id)
+        if source is None:
+            return item.source_id
+        return _norm(source.publisher) or _norm(source.domain) or source.id
+
     def _independent_sources(
         self,
         items: list[EvidenceItem],
         source_by_id: dict[str, SourceProfile],
-    ) -> int:
-        """Baseline independence: one count per distinct domain (ticket 08 refines)."""
-        keys: set[str] = set()
-        for item in items:
-            source = source_by_id.get(item.source_id)
-            if source is None:
-                continue
-            keys.add(source.domain or source.id)
-        return len(keys)
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """Count independent sources (ADR-0004).
+
+        One count per publisher (domain fallback: same subject, many domains
+        still one), reposts merged into the original and never counted anew;
+        uncertain reposts are conservatively merged (not independent).
+        """
+        if not items:
+            return 0, []
+        publishers = [self._publisher_key(item, source_by_id) for item in items]
+        parent = list(range(len(items)))
+
+        def find(index: int) -> int:
+            while parent[index] != index:
+                parent[index] = parent[parent[index]]
+                index = parent[index]
+            return index
+
+        def union(left_index: int, right_index: int) -> None:
+            left_root, right_root = find(left_index), find(right_index)
+            if left_root != right_root:
+                parent[right_root] = left_root
+
+        log: list[dict[str, Any]] = []
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                if publishers[i] == publishers[j]:
+                    union(i, j)
+                    continue
+                pair = self._repost_pair(items[i], items[j], source_by_id)
+                if pair is None:
+                    continue
+                reposted, original, reason = pair
+                repost_index = i if reposted is items[i] else j
+                original_index = j if repost_index == i else i
+                if find(repost_index) == find(original_index):
+                    continue
+                union(repost_index, original_index)
+                log.append(
+                    {
+                        "type": "repost",
+                        "evidence_id": reposted.id,
+                        "source_id": reposted.source_id,
+                        "repost_of": self._publisher_key(original, source_by_id),
+                        "reason": reason,
+                        "by": "rule",
+                    }
+                )
+        return len({find(index) for index in range(len(items))}), log
+
+    def _repost_pair(
+        self,
+        left: EvidenceItem,
+        right: EvidenceItem,
+        source_by_id: dict[str, SourceProfile],
+    ) -> tuple[EvidenceItem, EvidenceItem, str] | None:
+        """Detect that one item reposts the other's data, with the reason."""
+        left_source = source_by_id.get(left.source_id)
+        right_source = source_by_id.get(right.source_id)
+
+        for candidate, target in ((left, right_source), (right, left_source)):
+            attribution = _attribution_target(candidate.quote)
+            if attribution and _attribution_hits(attribution, target):
+                original = right if candidate is left else left
+                return candidate, original, "explicit_attribution"
+
+        left_quote, right_quote = _norm(left.quote), _norm(right.quote)
+        if not left_quote or not right_quote:
+            return None
+        ratio = difflib.SequenceMatcher(None, left_quote, right_quote).ratio()
+        if ratio >= REPOST_SIMILARITY:
+            reason = "quote_similarity"
+        elif ratio >= REPOST_UNCERTAIN_SIMILARITY:
+            reason = "quote_similarity_uncertain"
+        else:
+            return None
+        original = self._pick_original(left, right, source_by_id)
+        reposted = right if original is left else left
+        return reposted, original, reason
+
+    def _pick_original(
+        self,
+        left: EvidenceItem,
+        right: EvidenceItem,
+        source_by_id: dict[str, SourceProfile],
+    ) -> EvidenceItem:
+        left_rank = _tier_rank(source_by_id.get(left.source_id))
+        right_rank = _tier_rank(source_by_id.get(right.source_id))
+        if left_rank != right_rank:
+            return left if left_rank < right_rank else right
+        left_time, right_time = left.extracted_at or "", right.extracted_at or ""
+        if left_time != right_time:
+            return left if left_time < right_time else right
+        return left if left.id <= right.id else right
 
     def _best_tier(
         self, items: list[EvidenceItem], source_by_id: dict[str, SourceProfile]
@@ -547,6 +797,24 @@ class Adjudicator:
             "scope": picked.scope,
             "quote": picked.quote,
         }
+
+
+def _attribution_target(quote: str) -> str | None:
+    """Extract an explicit source annotation ("来源：XX", "转自 XX") if any."""
+    match = _ATTRIBUTION_RE.search(fold_text(quote))
+    return match.group(1).strip() if match else None
+
+
+def _attribution_hits(target: str, source: SourceProfile | None) -> bool:
+    if source is None:
+        return False
+    target_norm = _norm(target)
+    for name in (_norm(source.publisher), _norm(source.domain)):
+        if not name or not target_norm:
+            continue
+        if target_norm in name or name in target_norm:
+            return True
+    return False
 
 
 def _numeric_values(value: Any) -> list[float] | None:

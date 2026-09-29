@@ -32,6 +32,16 @@ def _source(source_id, domain, tier, publisher=None):
     )
 
 
+_QUOTES = [
+    "该季度市场整体保持平稳，未出现明显波动。",
+    "行业分析师指出需求端正在逐步回暖。",
+    "统计公报显示产业结构持续优化升级。",
+    "多家企业反馈订单量同比增长明显。",
+    "权威部门预计下阶段将延续恢复态势。",
+    "区域市场表现分化，头部企业优势扩大。",
+]
+
+
 def _item(
     item_id,
     source_id,
@@ -45,7 +55,7 @@ def _item(
     unit="辆",
     period_raw="2024年",
     extracted_at="2026-09-29T00:00:00+00:00",
-    quote="q",
+    quote=None,
 ):
     return EvidenceItem(
         id=item_id,
@@ -54,7 +64,9 @@ def _item(
         value_type=value_type,
         value=value,
         value_raw=value_raw if value_raw is not None else str(value),
-        quote=quote,
+        quote=quote
+        if quote is not None
+        else _QUOTES[(int(item_id.split("-")[-1]) - 1) % len(_QUOTES)],
         extractor="fake:model",
         entity=entity,
         unit=unit,
@@ -346,7 +358,14 @@ class FakeExtractionLLM:
     async def __call__(self, prompt):
         self.calls.append(prompt)
         if "来源分级" in prompt:
-            return '{"tier": "C", "publisher": "某站点", "org_type": "portal"}'
+            domain = ""
+            for line in prompt.splitlines():
+                if line.startswith("域名："):
+                    domain = line[len("域名：") :].strip()
+            return json.dumps(
+                {"tier": "C", "publisher": domain or "某站点", "org_type": "portal"},
+                ensure_ascii=False,
+            )
         if "证据抽取" in prompt:
             for url, items in self.items_by_source.items():
                 if url in prompt:
@@ -377,28 +396,34 @@ def _config(**overrides):
     return SimpleNamespace(**values)
 
 
-CONTENT = "2024 年，某公司新能源汽车销量为100万辆。" + "补充正文。" * 60
+def _raw_item(value, value_raw, quote):
+    return {
+        "entity": "某公司",
+        "metric": "新能源汽车销量",
+        "value_type": "number",
+        "value": value,
+        "value_raw": value_raw,
+        "unit": "辆",
+        "period": {"type": "year", "raw": "2024年"},
+        "scope": "全年累计",
+        "quote": quote,
+    }
 
-ITEM = {
-    "entity": "某公司",
-    "metric": "新能源汽车销量",
-    "value_type": "number",
-    "value": 1000000,
-    "value_raw": "100万辆",
-    "unit": "辆",
-    "period": {"type": "year", "raw": "2024年"},
-    "scope": "全年累计",
-    "quote": "某公司新能源汽车销量为100万辆",
-}
+
+CONTENT_A = "2024 年，某公司新能源汽车销量为100万辆。" + "补充正文。" * 60
+CONTENT_B = "2024 年，该企业新能源车型累计售出101万辆，同比稳步增长。" + "补充正文。" * 60
+
+ITEM_A = _raw_item(1000000, "100万辆", "某公司新能源汽车销量为100万辆")
+ITEM_B = _raw_item(1010000, "101万辆", "该企业新能源车型累计售出101万辆")
 
 
 async def _build_layer_artifact(tmp_path, *, adjudication_enabled):
     sources = [
-        {"url": "https://a.example/1", "title": "A", "raw_content": CONTENT},
-        {"url": "https://b.example/2", "title": "B", "raw_content": CONTENT},
+        {"url": "https://a.example/1", "title": "A", "raw_content": CONTENT_A},
+        {"url": "https://b.example/2", "title": "B", "raw_content": CONTENT_B},
     ]
     llm = FakeExtractionLLM(
-        {"https://a.example/1": [ITEM], "https://b.example/2": [ITEM]}
+        {"https://a.example/1": [ITEM_A], "https://b.example/2": [ITEM_B]}
     )
     layer = EvidenceLayer(
         config=_config(adjudication_enabled=adjudication_enabled),

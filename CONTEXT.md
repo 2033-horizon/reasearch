@@ -12,6 +12,10 @@ _Avoid_: 校验层、审核模块
 由顶层研究流程为子查询或子主题创建的嵌套 GPTResearcher 实例。
 _Avoid_: 子代理、子任务
 
+**顶层研究者 (Top-level researcher)**:
+一次研究任务中直接面向调用方（WebSocket/HTTP/CLI）的 GPTResearcher 实例，子研究者的父级。
+_Avoid_: 主研究者、父研究者
+
 **来源 (Source)**:
 一次研究中抓取到的网页素材，以 URL 唯一标识。
 _Avoid_: 网页、资料、材料

@@ -23,6 +23,7 @@ from .models import (
     SourceProfile,
 )
 from .tiering import TierClassifier, TierRules
+from .writing import build_citations
 
 logger = logging.getLogger(__name__)
 
@@ -271,6 +272,9 @@ class EvidenceLayer:
         if bool(_cfg(self.config, "adjudication_enabled", False)):
             artifact.groups = await self.adjudicator.adjudicate(evidence, profiles)
             artifact.schema_version = SCHEMA_VERSION_ADJUDICATED
+            # Number the valid conclusions once, so the artifact mapping and
+            # the report's [^n] markers always agree (ticket 10).
+            artifact.citations = build_citations(artifact)
 
         if self.store is not None:
             try:

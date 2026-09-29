@@ -182,9 +182,12 @@ class ReportGenerator:
                 self.researcher.websocket,
             )
 
+        # Evidence-driven runs restrict the introduction to the effective
+        # conclusions too, so no unverified number leaks outside the body.
         introduction = await write_report_introduction(
             query=self.researcher.query,
-            context=self.researcher.context,
+            context=getattr(self.researcher, "_evidence_writing_context", None)
+            or self.researcher.context,
             agent_role_prompt=self.researcher.cfg.agent_role or self.researcher.role,
             config=self.researcher.cfg,
             websocket=self.researcher.websocket,

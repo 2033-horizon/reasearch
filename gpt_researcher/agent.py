@@ -20,7 +20,7 @@ from .actions import (
     table_of_contents,
 )
 from .config import Config
-from .evidence import EvidenceLayer
+from .evidence import EvidenceLayer, build_writing_plan, finalize_report
 from .llm_provider import GenericLLMProvider
 from .memory import Memory
 from .prompts import get_prompt_family
@@ -206,6 +206,7 @@ class GPTResearcher:
         self.evidence_artifact = None  # Set by the evidence layer when enabled
         self.evidence_artifact_paths: dict[str, str] = {}
         self.evidence_run_id: int | None = None  # SQLite run row for this research
+        self._evidence_writing_context: str | None = None
 
         # Handle MCP strategy configuration with backwards compatibility
         self.mcp_strategy = self._resolve_mcp_strategy(mcp_strategy, mcp_max_iterations)
@@ -570,11 +571,41 @@ class GPTResearcher:
         has_available_images = bool(self.available_images)
         
         self._current_step = "report_writing"
-        await self._log_event("research", step="writing_report", details={
-            "existing_headers": existing_headers,
-            "context_source": "external" if ext_context else "internal",
-            "available_images_count": len(self.available_images),
-        })
+
+        # Evidence-driven writing (ticket 10): when adjudication produced
+        # effective conclusions, the writing context is evidence-only and the
+        # final markdown carries [^n] markers + footnote definitions.
+        plan = None
+        if self._evidence_writing_ready():
+            plan = build_writing_plan(
+                self.evidence_artifact,
+                pending_appendix=bool(
+                    getattr(self.cfg, "report_pending_appendix", True)
+                ),
+                pending_blocks_report=bool(
+                    getattr(self.cfg, "adjudication_pending_blocks_report", False)
+                ),
+            )
+            await self._log_event("research", step="writing_report", details={
+                "existing_headers": existing_headers,
+                "context_source": "evidence",
+                "citations": len(plan.citations),
+                "blocked": plan.blocked,
+                "available_images_count": len(self.available_images),
+            })
+            if plan.blocked:
+                await self._log_event("research", step="report_blocked", details={
+                    "reason": plan.blocked_message,
+                })
+                return plan.blocked_message
+            self._evidence_writing_context = plan.context
+            ext_context = plan.context
+        else:
+            await self._log_event("research", step="writing_report", details={
+                "existing_headers": existing_headers,
+                "context_source": "external" if ext_context else "internal",
+                "available_images_count": len(self.available_images),
+            })
 
         # Generate report with available images embedded
         report = await self.report_generator.write_report(
@@ -585,11 +616,23 @@ class GPTResearcher:
             available_images=self.available_images,  # Pass pre-generated images
         )
 
+        if plan is not None:
+            report = finalize_report(report, plan)
+
         await self._log_event("research", step="report_completed", details={
             "report_length": len(report),
             "images_embedded": len(self.available_images) if has_available_images else 0,
         })
         return report
+
+    def _evidence_writing_ready(self) -> bool:
+        """True when adjudication produced groups this report must consume."""
+        artifact = self.evidence_artifact
+        return bool(
+            artifact is not None
+            and artifact.groups is not None
+            and getattr(self.cfg, "adjudication_enabled", False)
+        )
 
     async def write_report_conclusion(self, report_body: str) -> str:
         """Write the conclusion section of the report.

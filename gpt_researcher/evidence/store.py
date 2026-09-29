@@ -27,6 +27,7 @@ from .models import (
     RejectedItem,
     SourceProfile,
 )
+from .writing import build_citations
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS runs (
     created_at TEXT NOT NULL,
     generated_at TEXT NOT NULL DEFAULT '',
     schema_version INTEGER NOT NULL DEFAULT 1,
+    citations_json TEXT,
     summary_json TEXT NOT NULL DEFAULT '{}',
     report_paths_json TEXT NOT NULL DEFAULT '{}'
 );
@@ -202,8 +204,8 @@ class EvidenceStore:
         with self._lock, self._conn:
             cursor = self._conn.execute(
                 "INSERT INTO runs (research_id, query, version, created_at,"
-                " generated_at, schema_version, summary_json, report_paths_json)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " generated_at, schema_version, citations_json, summary_json,"
+                " report_paths_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     research_id,
                     artifact.query,
@@ -211,6 +213,7 @@ class EvidenceStore:
                     _now_iso(),
                     artifact.generated_at,
                     int(artifact.schema_version),
+                    _dumps(artifact.citations) if artifact.citations is not None else None,
                     _dumps(artifact.summary),
                     _dumps(report_paths or {}),
                 ),
@@ -408,7 +411,8 @@ class EvidenceStore:
                 )
                 for row in group_rows
             ]
-        return EvidenceArtifact(
+        stored_citations = _loads(run["citations_json"], None)
+        artifact = EvidenceArtifact(
             research_id=research_id,
             query=run["query"] or "",
             sources=sources,
@@ -417,7 +421,13 @@ class EvidenceStore:
             generated_at=run["generated_at"] or run["created_at"],
             schema_version=schema_version,
             groups=groups,
+            citations=stored_citations,
         )
+        if stored_citations is not None or groups is not None:
+            # Rebuild from the latest reviews so citation numbering reflects
+            # the effective conclusions, not the frozen verdicts alone.
+            artifact.citations = build_citations(artifact)
+        return artifact
 
     def export_artifact(self, run_id: int, output_dir: str = "outputs") -> dict[str, str]:
         """Write the JSON + Markdown snapshot from the store; returns paths."""

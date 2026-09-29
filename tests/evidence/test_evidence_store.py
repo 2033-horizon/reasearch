@@ -21,6 +21,7 @@ from gpt_researcher.evidence import (
     EvidenceStore,
     RejectedItem,
     SourceProfile,
+    build_citations,
 )
 def _source(source_id, domain, tier, publisher=None):
     return SourceProfile(
@@ -78,7 +79,7 @@ def _artifact(*, research_id="research_store1", with_groups=False) -> EvidenceAr
                 merge_log=[{"type": "metric_merged", "metrics": ["销量", "销售量"]}],
             )
         ]
-    return EvidenceArtifact(
+    artifact = EvidenceArtifact(
         research_id=research_id,
         query="新能源行业",
         sources=sources,
@@ -88,6 +89,9 @@ def _artifact(*, research_id="research_store1", with_groups=False) -> EvidenceAr
         groups=groups,
         generated_at="2026-09-29T01:02:03+00:00",
     )
+    if with_groups:
+        artifact.citations = build_citations(artifact)
+    return artifact
 
 
 def test_record_and_load_round_trip(tmp_path):

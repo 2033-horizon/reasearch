@@ -230,6 +230,7 @@ class EvidenceArtifact:
     generated_at: str = field(default_factory=_now_iso)
     schema_version: int = SCHEMA_VERSION
     groups: list[EvidenceGroup] | None = None
+    citations: dict[str, dict[str, Any]] | None = None
 
     @property
     def summary(self) -> dict[str, Any]:
@@ -248,6 +249,8 @@ class EvidenceArtifact:
         }
         if self.groups is not None:
             payload["groups"] = [group.to_dict() for group in self.groups]
+        if self.citations is not None:
+            payload["citations"] = self.citations
         return payload
 
     def to_markdown(self) -> str:

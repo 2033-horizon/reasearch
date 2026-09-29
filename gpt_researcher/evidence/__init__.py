@@ -23,6 +23,16 @@ from .models import (
 )
 from .store import DB_SCHEMA_VERSION, REVIEW_ACTIONS, EvidenceStore
 from .tiering import TierClassifier, TierRule, TierRules
+from .writing import (
+    CITATION_TOKEN_RE,
+    EMPTY_EVIDENCE_MESSAGE,
+    PENDING_BLOCKED_MESSAGE,
+    WritingPlan,
+    build_citations,
+    build_writing_plan,
+    finalize_report,
+    footnote_text,
+)
 from ..utils.domains import normalize_domain
 
 __all__ = [
@@ -46,6 +56,14 @@ __all__ = [
     "EvidenceStore",
     "DB_SCHEMA_VERSION",
     "REVIEW_ACTIONS",
+    "WritingPlan",
+    "build_citations",
+    "build_writing_plan",
+    "finalize_report",
+    "footnote_text",
+    "CITATION_TOKEN_RE",
+    "EMPTY_EVIDENCE_MESSAGE",
+    "PENDING_BLOCKED_MESSAGE",
     "TierClassifier",
     "TierRule",
     "TierRules",

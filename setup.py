@@ -25,6 +25,10 @@ setup(
     description="GPT Researcher is an autonomous agent designed for comprehensive web research on any task",
     package_dir={'gpt_researcher': 'gpt_researcher'},
     packages=find_packages(exclude=exclude_packages),
+    # The tiering rule table is data, not code: declare it explicitly so
+    # wheels/sdists and container installs do not drop the YAML file.
+    package_data={"gpt_researcher.evidence": ["rules/*.yaml"]},
+    include_package_data=True,
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/assafelovic/gpt-researcher",

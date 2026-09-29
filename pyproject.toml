@@ -5,6 +5,9 @@ description = "GPT Researcher is an autonomous agent designed for comprehensive 
 authors = ["Assaf Elovic <assaf.elovic@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+# Ship the tiering rule table (data, not code) inside the wheel/sdist so
+# container and pip installs keep it even though it is not a .py module.
+include = ["gpt_researcher/evidence/rules/*.yaml"]
 
 [build-system]
 requires = ["poetry-core"]

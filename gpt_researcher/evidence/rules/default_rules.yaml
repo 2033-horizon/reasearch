@@ -1,0 +1,242 @@
+version: 1
+rules:
+  # A：政府及政府间组织
+  - match: suffix
+    value: .gov.cn
+    tier: A
+    org_type: government
+  - match: suffix
+    value: .gov.hk
+    tier: A
+    org_type: government
+  - match: domain_exact
+    value: stats.gov.cn
+    tier: A
+    publisher: 国家统计局
+    org_type: government
+  - match: domain_exact
+    value: pbc.gov.cn
+    tier: A
+    publisher: 中国人民银行
+    org_type: government
+  - match: domain_exact
+    value: miit.gov.cn
+    tier: A
+    publisher: 工业和信息化部
+    org_type: government
+  - match: domain_exact
+    value: ndrc.gov.cn
+    tier: A
+    publisher: 国家发展和改革委员会
+    org_type: government
+  - match: domain_exact
+    value: moa.gov.cn
+    tier: A
+    publisher: 农业农村部
+    org_type: government
+  - match: domain_exact
+    value: mofcom.gov.cn
+    tier: A
+    publisher: 商务部
+    org_type: government
+  - match: domain_exact
+    value: custom.gov.cn
+    tier: A
+    publisher: 海关总署
+    org_type: government
+  - match: domain_exact
+    value: samr.gov.cn
+    tier: A
+    publisher: 国家市场监督管理总局
+    org_type: government
+  - match: suffix
+    value: .who.int
+    tier: A
+    publisher: 世界卫生组织
+    org_type: international_org
+  - match: suffix
+    value: .imf.org
+    tier: A
+    publisher: 国际货币基金组织
+    org_type: international_org
+  - match: suffix
+    value: .worldbank.org
+    tier: A
+    publisher: 世界银行
+    org_type: international_org
+  - match: suffix
+    value: .oecd.org
+    tier: A
+    publisher: 经合组织
+    org_type: international_org
+
+  # B：权威机构与央媒
+  - match: suffix
+    value: .xinhuanet.com
+    tier: B
+    publisher: 新华社
+    org_type: central_media
+  - match: suffix
+    value: .people.com.cn
+    tier: B
+    publisher: 人民网
+    org_type: central_media
+  - match: suffix
+    value: .cctv.com
+    tier: B
+    publisher: 央视网
+    org_type: central_media
+  - match: suffix
+    value: .chinanews.com.cn
+    tier: B
+    publisher: 中国新闻网
+    org_type: central_media
+  - match: suffix
+    value: .gmw.cn
+    tier: B
+    publisher: 光明网
+    org_type: central_media
+  - match: suffix
+    value: .cnr.cn
+    tier: B
+    publisher: 央广网
+    org_type: central_media
+  - match: suffix
+    value: .chinadaily.com.cn
+    tier: B
+    publisher: 中国日报
+    org_type: central_media
+  - match: domain_exact
+    value: sse.com.cn
+    tier: B
+    publisher: 上海证券交易所
+    org_type: institute
+  - match: domain_exact
+    value: szse.cn
+    tier: B
+    publisher: 深圳证券交易所
+    org_type: institute
+  - match: suffix
+    value: .caam.org.cn
+    tier: B
+    publisher: 中国汽车工业协会
+    org_type: association
+  - match: suffix
+    value: .cnki.net
+    tier: B
+    publisher: 中国知网
+    org_type: academia
+  - match: suffix
+    value: .mckinsey.com
+    tier: B
+    publisher: 麦肯锡
+    org_type: consulting
+  - match: suffix
+    value: .deloitte.com
+    tier: B
+    publisher: 德勤
+    org_type: consulting
+  - match: suffix
+    value: .pwc.com
+    tier: B
+    publisher: 普华永道
+    org_type: consulting
+  - match: suffix
+    value: .kpmg.com
+    tier: B
+    publisher: 毕马威
+    org_type: consulting
+  - match: suffix
+    value: .ey.com
+    tier: B
+    publisher: 安永
+    org_type: consulting
+
+  # C：行业与正规媒体
+  - match: suffix
+    value: .yicai.com
+    tier: C
+    publisher: 第一财经
+    org_type: media
+  - match: suffix
+    value: .21jingji.com
+    tier: C
+    publisher: 21世纪经济报道
+    org_type: media
+  - match: suffix
+    value: .stcn.com
+    tier: C
+    publisher: 证券时报
+    org_type: media
+  - match: suffix
+    value: .cs.com.cn
+    tier: C
+    publisher: 中国证券报
+    org_type: media
+  - match: suffix
+    value: .thepaper.cn
+    tier: C
+    publisher: 澎湃新闻
+    org_type: media
+  - match: suffix
+    value: .jiemian.com
+    tier: C
+    publisher: 界面新闻
+    org_type: media
+  - match: suffix
+    value: .caixin.com
+    tier: C
+    publisher: 财新
+    org_type: media
+  - match: suffix
+    value: .eastmoney.com
+    tier: C
+    publisher: 东方财富
+    org_type: media
+  - match: suffix
+    value: .sina.com.cn
+    tier: C
+    publisher: 新浪
+    org_type: portal
+  - match: suffix
+    value: .163.com
+    tier: C
+    publisher: 网易
+    org_type: portal
+  - match: suffix
+    value: .sohu.com
+    tier: C
+    publisher: 搜狐
+    org_type: portal
+  - match: suffix
+    value: .qq.com
+    tier: C
+    publisher: 腾讯
+    org_type: portal
+
+  # D：自媒体及其他（确定性起见也纳入规则）
+  - match: suffix
+    value: .zhihu.com
+    tier: D
+    publisher: 知乎
+    org_type: ugc
+  - match: suffix
+    value: .weibo.com
+    tier: D
+    publisher: 微博
+    org_type: ugc
+  - match: suffix
+    value: .toutiao.com
+    tier: D
+    publisher: 今日头条
+    org_type: ugc
+  - match: suffix
+    value: .xiaohongshu.com
+    tier: D
+    publisher: 小红书
+    org_type: ugc
+  - match: suffix
+    value: .douyin.com
+    tier: D
+    publisher: 抖音
+    org_type: ugc

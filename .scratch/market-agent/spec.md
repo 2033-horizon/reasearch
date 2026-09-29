@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+> 后续阶段见 `spec-phase2.md`（聚类→裁决→复核→证据驱动报告→SQLite）。
+
 ## Problem Statement
 
 领导需要定期做行业/企业调研并输出洞察，但目前在 GPT Researcher 基础上生成的报告存在三个痛点：

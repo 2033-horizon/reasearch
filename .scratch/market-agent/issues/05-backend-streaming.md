@@ -4,9 +4,9 @@
 
 **Blocked by:** 03（顶层接入）
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] 开启证据层时，WebSocket 收到 evidence 进度/统计事件：开始、完成、按来源等级的计数
-- [ ] path 事件包含 evidence 产物下载路径，路径格式与报告文件一致（正斜杠 + URL 编码），不在 Windows 上出现反斜杠坏链
-- [ ] 前端处理新增事件类型不报错（可作为日志行展示）
-- [ ] 一次完整 WebSocket 研究流程验证：事件顺序与产物可访问
+- [x] 开启证据层时，WebSocket 收到 evidence 进度/统计事件：开始、完成、按来源等级的计数
+- [x] path 事件包含 evidence 产物下载路径，路径格式与报告文件一致（正斜杠 + URL 编码），不在 Windows 上出现反斜杠坏链
+- [x] 前端处理新增事件类型不报错（可作为日志行展示）
+- [x] 一次完整 WebSocket 研究流程验证：事件顺序与产物可访问

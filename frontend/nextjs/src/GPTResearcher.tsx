@@ -243,6 +243,15 @@ export const GPTResearcher = ({
           key: `${data.type}-${data.content}`,
         }];
       }
+      // Evidence layer progress/stats events render as log lines
+      else if (data.type === 'evidence') {
+        return [...acc, {
+          header: data.content,
+          text: data.output,
+          metadata: data.metadata,
+          key: `evidence-${data.content}-${acc.length}`,
+        }];
+      }
       return acc;
     }, []);
     

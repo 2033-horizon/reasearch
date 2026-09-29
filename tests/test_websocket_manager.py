@@ -91,12 +91,12 @@ class WebSocketManagerTests(unittest.IsolatedAsyncioTestCase):
 
         async def fake_run_agent(*args, **kwargs):
             call_kwargs.update(kwargs)
-            return "stub-report"
+            return "stub-report", object()
 
         websocket_manager.run_agent = fake_run_agent
 
         with patch.dict(os.environ, {"CONFIG_PATH": "custom-config"}, clear=False):
-            report = await manager.start_streaming(
+            report, researcher = await manager.start_streaming(
                 task="test-task",
                 report_type="research_report",
                 report_source="web",
@@ -107,7 +107,9 @@ class WebSocketManagerTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(report, "stub-report")
+        self.assertIsNotNone(researcher)
         self.assertEqual(call_kwargs["config_path"], "custom-config")
+        self.assertTrue(call_kwargs["return_researcher"])
 
 
 if __name__ == "__main__":

@@ -163,7 +163,7 @@ async def handle_start_command(websocket, data: str, manager):
 
     sanitized_filename = sanitize_filename(f"task_{int(time.time())}_{task}")
 
-    report = await manager.start_streaming(
+    report, researcher = await manager.start_streaming(
         task,
         report_type,
         report_source,
@@ -182,6 +182,11 @@ async def handle_start_command(websocket, data: str, manager):
     file_paths = await generate_report_files(report, sanitized_filename)
     # Add JSON log path to file_paths
     file_paths["json"] = os.path.relpath(logs_handler.log_file)
+    # Expose evidence artifact downloads (JSON + Markdown) when the evidence
+    # layer ran; paths follow the report convention (outputs/ + URL quoting).
+    evidence_paths = getattr(researcher, "evidence_artifact_paths", None)
+    if evidence_paths:
+        file_paths["evidence"] = evidence_paths
     await send_file_paths(websocket, file_paths)
 
 

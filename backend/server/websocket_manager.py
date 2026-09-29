@@ -99,19 +99,30 @@ class WebSocketManager:
                 pass  # If this fails too, there's nothing more we can do
 
     async def start_streaming(self, task, report_type, report_source, source_urls, document_urls, tone, websocket, headers=None, query_domains=[], mcp_enabled=False, mcp_strategy="fast", mcp_configs=[], max_search_results=None):
-        """Start streaming the output."""
+        """Start streaming the output.
+
+        Returns:
+            tuple: (report, researcher) so the caller can also expose
+            side products such as the evidence artifact paths.
+        """
         tone = Tone[tone]
         # add customized JSON config file path here
         config_path = os.environ.get("CONFIG_PATH", "default")
 
         # Pass MCP parameters to run_agent
-        report = await run_agent(
+        result = await run_agent(
             task, report_type, report_source, source_urls, document_urls, tone, websocket, 
             headers=headers, query_domains=query_domains, config_path=config_path,
             mcp_enabled=mcp_enabled, mcp_strategy=mcp_strategy, mcp_configs=mcp_configs,
-            max_search_results=max_search_results
+            max_search_results=max_search_results, return_researcher=True
         )
-        return report
+        # Multi-agents runs return the report alone; everything else returns
+        # (report, researcher) so side products can be exposed to the caller.
+        if isinstance(result, tuple):
+            report, researcher = result
+        else:
+            report, researcher = result, None
+        return report, researcher
 
 async def run_agent(task, report_type, report_source, source_urls, document_urls, tone: Tone, websocket, stream_output=stream_output, headers=None, query_domains=[], config_path="", return_researcher=False, mcp_enabled=False, mcp_strategy="fast", mcp_configs=[], max_search_results=None):
     """Run the agent."""    

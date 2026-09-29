@@ -128,8 +128,20 @@ async def write_md_to_word(text: str, filename: str = "") -> str:
     try:
         from docx import Document
         from htmldocx import HtmlToDocx
+        from gpt_researcher.evidence.docx import (
+            inject_footnotes,
+            mark_footnote_references,
+            split_footnote_definitions,
+        )
+
+        # Evidence-driven reports carry [^n] markers plus a definition block.
+        # Lift the definitions out before rendering and inject real Word
+        # footnotes afterwards (ticket 11); plain reports pass through as-is.
+        body, definitions = split_footnote_definitions(text)
+        body = mark_footnote_references(body, definitions)
+
         # Convert report markdown to HTML
-        html = mistune.html(text)
+        html = mistune.html(body)
         # Create a document object
         doc = Document()
         # Convert the html generated from the report to document format
@@ -137,6 +149,9 @@ async def write_md_to_word(text: str, filename: str = "") -> str:
 
         # Saving the docx document to file_path
         doc.save(file_path)
+
+        if definitions:
+            inject_footnotes(file_path, definitions)
 
         print(f"Report written to {file_path}")
 

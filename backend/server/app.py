@@ -35,6 +35,7 @@ from gpt_researcher.utils.enum import Tone
 from chat.chat import ChatAgentWithMemory
 
 from server.report_store import ReportStore
+from server.review import router as review_router
 
 # MongoDB services removed - no database persistence needed
 
@@ -95,6 +96,9 @@ async def lifespan(app: FastAPI):
 
 # App initialization
 app = FastAPI(lifespan=lifespan)
+
+# Evidence review loop (pending groups, review actions, regeneration; ticket 12)
+app.include_router(review_router)
 
 # Configure allowed origins for CORS
 allowed_origins_env = os.getenv("CORS_ALLOW_ORIGINS")

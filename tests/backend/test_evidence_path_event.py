@@ -99,3 +99,37 @@ async def test_path_event_tolerates_missing_researcher(
     output = _path_event(await _run(monkeypatch, tmp_path, None, stub_report_files))
 
     assert "evidence" not in output
+
+
+@pytest.mark.asyncio
+async def test_path_event_includes_review_entry_for_adjudicated_runs(
+    monkeypatch, tmp_path, stub_report_files
+):
+    artifact = SimpleNamespace(groups=[{"id": "G-001"}], research_id="research_abc")
+    researcher = SimpleNamespace(
+        evidence_artifact_paths={},
+        evidence_artifact=artifact,
+        evidence_run_id=None,
+    )
+
+    output = _path_event(await _run(monkeypatch, tmp_path, researcher, stub_report_files))
+
+    assert output["review"] == "/review/research_abc"
+    assert output["report_version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_path_event_without_groups_has_no_review_entry(
+    monkeypatch, tmp_path, stub_report_files
+):
+    artifact = SimpleNamespace(groups=None, research_id="research_abc")
+    researcher = SimpleNamespace(
+        evidence_artifact_paths={},
+        evidence_artifact=artifact,
+        evidence_run_id=None,
+    )
+
+    output = _path_event(await _run(monkeypatch, tmp_path, researcher, stub_report_files))
+
+    assert "review" not in output
+    assert "report_version" not in output

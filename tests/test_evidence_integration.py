@@ -145,6 +145,23 @@ async def test_enabled_top_level_produces_artifact_paths_and_events(monkeypatch,
 
 
 @pytest.mark.asyncio
+async def test_adjudication_events_streamed_when_enabled(monkeypatch, tmp_path):
+    _patch_layer_llm(monkeypatch)
+    researcher, websocket = _make_researcher(monkeypatch, tmp_path, enabled=True)
+    researcher.cfg.adjudication_enabled = True
+    researcher.cfg.evidence_db_path = ""
+    _stub_research(researcher)
+
+    await researcher.conduct_research()
+
+    events = [m for m in websocket.messages if m.get("type") == "adjudication"]
+    assert [e["content"] for e in events] == ["clustering", "clustered", "adjudicated"]
+    assert events[1]["metadata"]["groups"] >= 1
+    assert "pending" in events[2]["metadata"]
+    assert researcher.evidence_artifact.groups is not None
+
+
+@pytest.mark.asyncio
 async def test_sub_researcher_never_triggers_even_when_enabled(monkeypatch, tmp_path):
     _patch_layer_llm(monkeypatch)
     researcher, websocket = _make_researcher(

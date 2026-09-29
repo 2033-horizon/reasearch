@@ -205,6 +205,7 @@ class GPTResearcher:
         self.is_sub_researcher = is_sub_researcher
         self.evidence_artifact = None  # Set by the evidence layer when enabled
         self.evidence_artifact_paths: dict[str, str] = {}
+        self.evidence_run_id: int | None = None  # SQLite run row for this research
 
         # Handle MCP strategy configuration with backwards compatibility
         self.mcp_strategy = self._resolve_mcp_strategy(mcp_strategy, mcp_max_iterations)
@@ -507,6 +508,7 @@ class GPTResearcher:
         # Attribute evidence LLM spending to its own step so cost accounting
         # separates extraction from the rest of the research.
         self._current_step = "evidence"
+        layer: EvidenceLayer | None = None
         try:
             layer = EvidenceLayer(
                 self.cfg,
@@ -521,7 +523,15 @@ class GPTResearcher:
                 query=self.query,
             )
             self.evidence_artifact = artifact
-            self.evidence_artifact_paths = artifact.save("outputs")
+            # When the SQLite store is active the artifacts are exported from
+            # it, so downloads always match the system of record (ADR-0005).
+            if layer.store is not None and layer.last_run_id is not None:
+                self.evidence_run_id = layer.last_run_id
+                self.evidence_artifact_paths = layer.store.export_artifact(
+                    layer.last_run_id, "outputs"
+                )
+            else:
+                self.evidence_artifact_paths = artifact.save("outputs")
             await self._log_event("research", step="evidence_completed", details={
                 "paths": self.evidence_artifact_paths,
                 "summary": artifact.summary,
@@ -534,6 +544,8 @@ class GPTResearcher:
                 f"Evidence layer failed: {e}", exc_info=True
             )
         finally:
+            if layer is not None:
+                layer.close()
             self._current_step = previous_step
 
     async def write_report(

@@ -14,6 +14,7 @@ from ..utils.domains import normalize_domain
 from ..utils.llm import create_chat_completion
 from .adjudication import AdjudicationRules, Adjudicator, JudgementCache
 from .extraction import EvidenceExtractor
+from .store import EvidenceStore
 from .models import (
     SCHEMA_VERSION_ADJUDICATED,
     EvidenceArtifact,
@@ -74,6 +75,7 @@ class EvidenceLayer:
         on_event: EventCallback | None = None,
         on_adjudication_event: EventCallback | None = None,
         judgement_cache: Any | None = None,
+        store_path: str | None = None,
     ):
         self.config = config
         self.cost_callback = cost_callback
@@ -82,6 +84,19 @@ class EvidenceLayer:
         self.on_adjudication_event = on_adjudication_event
         self.llm = llm if llm is not None else self._build_default_llm()
         self.extractor_name = self._extractor_name()
+
+        db_path = (
+            store_path
+            if store_path is not None
+            else str(_cfg(config, "evidence_db_path", "") or "")
+        )
+        self.store: EvidenceStore | None = None
+        if db_path:
+            try:
+                self.store = EvidenceStore(db_path)
+            except Exception as exc:
+                logger.error("Evidence store unavailable at %s: %s", db_path, exc)
+        self.last_run_id: int | None = None
 
         if adjudication_llm is not None:
             self.adjudication_llm = adjudication_llm
@@ -103,18 +118,34 @@ class EvidenceLayer:
             chunk_overlap=int(_cfg(config, "evidence_chunk_overlap", 400)),
             concurrency=int(_cfg(config, "evidence_concurrency", 4)),
             extractor_name=self.extractor_name,
+            cache=self.store,
         )
 
         adjudication_rules_path = (
             _cfg(config, "adjudication_rules_path", "") or None
         )
         self.adjudication_rules = AdjudicationRules.load(adjudication_rules_path)
+        if judgement_cache is not None:
+            cache = judgement_cache
+        elif self.store is not None:
+            cache = self.store
+        else:
+            cache = JudgementCache()
         self.adjudicator = Adjudicator(
             self.adjudication_rules,
             llm=self.adjudication_llm,
-            cache=judgement_cache if judgement_cache is not None else JudgementCache(),
+            cache=cache,
             on_event=self._emit_adjudication,
         )
+
+    def close(self) -> None:
+        """Release the SQLite connection (safe to call more than once)."""
+        if self.store is not None:
+            try:
+                self.store.close()
+            except Exception as exc:
+                logger.warning("Failed to close evidence store: %s", exc)
+            self.store = None
 
     def _llm_selection(self, config_key: str = "evidence_llm") -> tuple[str | None, str | None]:
         level = str(_cfg(self.config, config_key, "fast") or "fast").strip().lower()
@@ -241,6 +272,12 @@ class EvidenceLayer:
             artifact.groups = await self.adjudicator.adjudicate(evidence, profiles)
             artifact.schema_version = SCHEMA_VERSION_ADJUDICATED
 
+        if self.store is not None:
+            try:
+                self.last_run_id = self.store.record_run(artifact)
+            except Exception as exc:
+                logger.error("Failed to record evidence run: %s", exc)
+
         summary = artifact.summary
         await self._emit(
             {
@@ -249,6 +286,7 @@ class EvidenceLayer:
                     f"🧾 Evidence layer completed: {summary['evidence']} evidence / "
                     f"{summary['rejected']} rejected from {summary['sources']} sources"
                 ),
+                "cached_sources": self.extractor.cache_hits,
                 **summary,
             }
         )

@@ -21,6 +21,7 @@ from .models import (
     RejectedItem,
     SourceProfile,
 )
+from .store import DB_SCHEMA_VERSION, REVIEW_ACTIONS, EvidenceStore
 from .tiering import TierClassifier, TierRule, TierRules
 from ..utils.domains import normalize_domain
 
@@ -42,6 +43,9 @@ __all__ = [
     "AdjudicationRules",
     "Adjudicator",
     "JudgementCache",
+    "EvidenceStore",
+    "DB_SCHEMA_VERSION",
+    "REVIEW_ACTIONS",
     "TierClassifier",
     "TierRule",
     "TierRules",

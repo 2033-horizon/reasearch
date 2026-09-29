@@ -7,6 +7,7 @@ into ``rejected[]`` (no fuzzy matching, no unverified items downstream).
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -141,6 +142,7 @@ class EvidenceExtractor:
         concurrency: int = 4,
         extractor_name: str = "unknown",
         min_content_chars: int = MIN_CONTENT_CHARS,
+        cache: Any | None = None,
     ):
         self.llm = llm
         self.max_chars = max_chars
@@ -149,6 +151,14 @@ class EvidenceExtractor:
         self.concurrency = max(1, concurrency)
         self.extractor_name = extractor_name
         self.min_content_chars = min_content_chars
+        # Optional extraction cache (EvidenceStore): same URL + content reuses
+        # the previously verified items instead of re-spending LLM calls.
+        self.cache = cache
+        self.cache_hits = 0
+
+    @staticmethod
+    def content_hash(content: str) -> str:
+        return hashlib.sha256((content or "").encode("utf-8", "replace")).hexdigest()
 
     async def extract(
         self,
@@ -162,6 +172,12 @@ class EvidenceExtractor:
         content = content or ""
         if len(content.strip()) < self.min_content_chars:
             return [], []
+
+        content_hash = self.content_hash(content)
+        cached = self._reuse_cache(source_id, url, content, content_hash)
+        if cached is not None:
+            self.cache_hits += 1
+            return cached, []
 
         truncated = content[: self.max_chars] if self.max_chars > 0 else content
         chunks = chunk_text(truncated, self.chunk_size, self.chunk_overlap)
@@ -196,7 +212,50 @@ class EvidenceExtractor:
                 continue
             seen.add(key)
             deduped.append(item)
+        self._store_cache(url, content_hash, deduped)
         return deduped, rejected
+
+    def _reuse_cache(
+        self, source_id: str, url: str, content: str, content_hash: str
+    ) -> list[EvidenceItem] | None:
+        """Return cached verified items for the same URL + content, or None.
+
+        Fail-closed: every reused quote must still be locatable in the current
+        content, otherwise the whole cache entry is ignored and extraction
+        runs again.
+        """
+        if self.cache is None or not hasattr(self.cache, "get_extraction"):
+            return None
+        try:
+            payload = self.cache.get_extraction(url, content_hash)
+        except Exception as exc:
+            logger.warning("Extraction cache lookup failed for %s: %s", url, exc)
+            return None
+        if not isinstance(payload, list) or not payload:
+            return None
+        items: list[EvidenceItem] = []
+        for raw in payload:
+            if not isinstance(raw, dict):
+                continue
+            item = self._normalize_item(source_id, raw)
+            if item is None or not self._quote_found(item.quote, content):
+                return None
+            if raw.get("extracted_at"):
+                item.extracted_at = str(raw["extracted_at"])
+            if raw.get("extractor"):
+                item.extractor = str(raw["extractor"])
+            items.append(item)
+        return items or None
+
+    def _store_cache(self, url: str, content_hash: str, items: list[EvidenceItem]) -> None:
+        if self.cache is None or not hasattr(self.cache, "put_extraction") or not items:
+            return
+        try:
+            self.cache.put_extraction(
+                url, content_hash, [item.to_dict() for item in items]
+            )
+        except Exception as exc:
+            logger.warning("Extraction cache write failed for %s: %s", url, exc)
 
     async def _extract_chunk(
         self,

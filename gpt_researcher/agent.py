@@ -507,6 +507,7 @@ class GPTResearcher:
             })
         except Exception as e:
             self.evidence_artifact = None
+            self.evidence_artifact_paths = {}
             import logging
             logging.getLogger(__name__).error(
                 f"Evidence layer failed: {e}", exc_info=True

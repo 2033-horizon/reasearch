@@ -13,10 +13,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Awaitable, Callable
 
-import json_repair
 import yaml
 
 from ..utils.domains import normalize_domain
+from .parsing import parse_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -140,30 +140,6 @@ def build_tier_prompt(domain: str, title: str = "") -> str:
     )
 
 
-def _parse_json_object(response: str) -> dict:
-    candidates = [response.strip()]
-    import re
-
-    for pattern in (
-        re.compile(r"```(?:json)?\s*(?P<payload>[\s\S]*?)```", re.IGNORECASE),
-        re.compile(r"(?P<payload>\{[\s\S]*\})"),
-    ):
-        for match in pattern.finditer(response):
-            candidate = match.group("payload").strip()
-            if candidate and candidate not in candidates:
-                candidates.append(candidate)
-    for candidate in candidates:
-        if not candidate:
-            continue
-        try:
-            parsed = json_repair.loads(candidate)
-        except Exception:
-            continue
-        if isinstance(parsed, dict):
-            return parsed
-    return {}
-
-
 class TierClassifier:
     """Assigns a tier to a URL: rules first, LLM fallback capped at C, else D."""
 
@@ -235,7 +211,7 @@ class TierClassifier:
 
         try:
             response = await self.llm(build_tier_prompt(domain, title))
-            parsed = _parse_json_object(response)
+            parsed = parse_json_object(response)
             tier = str(parsed.get("tier") or "").strip().upper()
         except Exception as exc:
             logger.warning("LLM tier classification failed for %s: %s", domain, exc)

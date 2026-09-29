@@ -303,6 +303,43 @@ async def test_concurrency_limit_is_respected():
 
 
 @pytest.mark.asyncio
+async def test_concurrency_limit_is_global_across_sources():
+    inflight = 0
+    peak = 0
+
+    class SlowLLM:
+        async def __call__(self, prompt):
+            nonlocal inflight, peak
+            inflight += 1
+            peak = max(peak, inflight)
+            await asyncio.sleep(0.01)
+            inflight -= 1
+            return "[]"
+
+    layer = EvidenceLayer(
+        config=SimpleNamespace(
+            evidence_llm="fast",
+            evidence_max_sources=10,
+            evidence_max_chars_per_source=30000,
+            evidence_chunk_size=40,
+            evidence_chunk_overlap=0,
+            evidence_concurrency=2,
+            tier_cache_path="",
+        ),
+        llm=SlowLLM(),
+    )
+    sources = [
+        {"url": f"https://www.163.com/article/{i}", "title": "", "raw_content": "y" * 360}
+        for i in range(4)
+    ]
+    await layer.build(sources, research_id="r1", query="q")
+
+    # 4 sources x 9 chunks each, one shared limit of 2.
+    assert peak <= 2, "the concurrency cap must span the whole run, not one source"
+    assert peak >= 2
+
+
+@pytest.mark.asyncio
 async def test_extraction_llm_cost_is_reported_to_existing_cost_tracking(monkeypatch):
     charged = []
 

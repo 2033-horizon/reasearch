@@ -103,7 +103,9 @@ class EvidenceLayer:
         provider, model = self._llm_selection()
         if not provider or not model:
             return None
-        max_tokens = int(_cfg(self.config, "fast_token_limit", 4000) or 4000)
+        level = str(_cfg(self.config, "evidence_llm", "fast") or "fast").strip().lower()
+        token_key = "smart_token_limit" if level == "smart" else "fast_token_limit"
+        max_tokens = int(_cfg(self.config, token_key, 4000) or 4000)
 
         async def call(prompt: str) -> str:
             return await create_chat_completion(
@@ -161,9 +163,14 @@ class EvidenceLayer:
 
         evidence: list[EvidenceItem] = []
         rejected: list[RejectedItem] = []
+        # One semaphore shared by every source so EVIDENCE_CONCURRENCY bounds
+        # in-flight LLM calls for the whole run, not per source.
+        gate = asyncio.Semaphore(self.extractor.concurrency)
         results = await asyncio.gather(
             *(
-                self.extractor.extract(profile.id, profile.url, contents[profile.id])
+                self.extractor.extract(
+                    profile.id, profile.url, contents[profile.id], semaphore=gate
+                )
                 for profile in profiles
             )
         )

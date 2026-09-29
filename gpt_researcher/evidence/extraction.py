@@ -13,9 +13,8 @@ import re
 import unicodedata
 from typing import Any, Awaitable, Callable
 
-import json_repair
-
 from .models import EvidenceItem, RejectedItem
+from .parsing import iter_parsed_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +24,6 @@ LLMCall = Callable[[str], Awaitable[str]]
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 _RANGE_SPLIT_RE = re.compile(r"[-~～–—至]")
 _CN_MULTIPLIERS = {"亿": 1e8, "万": 1e4, "千": 1e3, "百": 1e2}
-_JSON_BLOCK_PATTERNS = (
-    re.compile(r"```(?:json)?\s*(?P<payload>[\s\S]*?)```", re.IGNORECASE),
-    re.compile(r"(?P<payload>\[[\s\S]*\])"),
-    re.compile(r"(?P<payload>\{[\s\S]*\})"),
-)
 
 
 def build_extraction_prompt(url: str, chunk: str) -> str:
@@ -121,21 +115,7 @@ def _normalize_value(value_type: str, raw_value: Any) -> Any:
 
 def parse_items_payload(response: str) -> list[dict] | None:
     """Recover a list of item dicts from dirty LLM output; None on failure."""
-    candidates: list[str] = []
-    text = (response or "").strip()
-    if text:
-        candidates.append(text)
-    for pattern in _JSON_BLOCK_PATTERNS:
-        for match in pattern.finditer(response or ""):
-            candidate = match.group("payload").strip()
-            if candidate and candidate not in candidates:
-                candidates.append(candidate)
-
-    for candidate in candidates:
-        try:
-            parsed = json_repair.loads(candidate)
-        except Exception:
-            continue
+    for parsed in iter_parsed_candidates(response):
         if isinstance(parsed, list):
             return [item for item in parsed if isinstance(item, dict)]
         if isinstance(parsed, dict):
@@ -175,6 +155,7 @@ class EvidenceExtractor:
         source_id: str,
         url: str,
         content: str,
+        semaphore: asyncio.Semaphore | None = None,
     ) -> tuple[list[EvidenceItem], list[RejectedItem]]:
         if self.llm is None:
             return [], []
@@ -187,10 +168,12 @@ class EvidenceExtractor:
         if not chunks:
             return [], []
 
-        semaphore = asyncio.Semaphore(self.concurrency)
+        # A shared semaphore (passed by the layer) bounds LLM calls across all
+        # sources, not just within one source, so cost stays predictable.
+        gate = semaphore if semaphore is not None else asyncio.Semaphore(self.concurrency)
 
         async def process(chunk: str) -> tuple[list[EvidenceItem], list[RejectedItem]]:
-            async with semaphore:
+            async with gate:
                 return await self._extract_chunk(source_id, url, chunk)
 
         results = await asyncio.gather(*(process(chunk) for chunk in chunks))
@@ -320,19 +303,14 @@ class EvidenceExtractor:
         except Exception as exc:
             logger.warning("Quote correction LLM call failed: %s", exc)
             return None
-        parsed = None
-        try:
-            parsed = json_repair.loads(response or "")
-        except Exception:
-            for pattern in _JSON_BLOCK_PATTERNS:
-                match = pattern.search(response or "")
-                if not match:
-                    continue
-                try:
-                    parsed = json_repair.loads(match.group("payload"))
-                    break
-                except Exception:
-                    continue
+        parsed = next(
+            (
+                candidate
+                for candidate in iter_parsed_candidates(response)
+                if isinstance(candidate, dict)
+            ),
+            None,
+        )
         if not isinstance(parsed, dict):
             return None
         candidate = str(parsed.get("quote") or "").strip()

@@ -263,6 +263,11 @@ def test_packaged_default_rules_load_without_path():
     assert rules.rules, "packaged default rule table must not be empty"
     assert all(rule.tier in {"A", "B", "C", "D"} for rule in rules.rules)
 
+    customs, label = rules.match("customs.gov.cn")
+    assert customs is not None
+    assert customs.publisher == "海关总署"
+    assert label == "domain_exact:customs.gov.cn"
+
 
 def test_custom_rules_path_overrides_default(tmp_path):
     rules = TierRules.load(_write_rules(tmp_path))

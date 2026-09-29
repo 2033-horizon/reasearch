@@ -70,8 +70,10 @@ def verify(artifact, researcher, rules: TierRules) -> list[str]:
                 f"quote not found for {item.id} ({item.metric}): {item.quote[:50]!r}"
             )
     print(f"[2] 引用逐字命中: {hits}/{len(sampled)} (要求 100%)")
-    if not sampled:
-        failures.append("artifact contains no evidence items to sample")
+    if len(sampled) < SAMPLE_SIZE:
+        failures.append(
+            f"only {len(sampled)} evidence items available; cannot sample {SAMPLE_SIZE}"
+        )
 
     for profile in artifact.sources:
         matched, label = rules.match(profile.domain)

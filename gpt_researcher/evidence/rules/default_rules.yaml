@@ -40,7 +40,7 @@ rules:
     publisher: 商务部
     org_type: government
   - match: domain_exact
-    value: custom.gov.cn
+    value: customs.gov.cn
     tier: A
     publisher: 海关总署
     org_type: government

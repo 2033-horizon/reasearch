@@ -204,7 +204,9 @@ class EvidenceArtifact:
         for item in self.evidence:
             period = item.period or {}
             period_text = period.get("raw") or period.get("type") or ""
-            value_text = f"{item.value_raw}（{_table_cell(item.value)}）" if item.value_raw else _table_cell(item.value)
+            value_text = (
+                f"{item.value_raw}（{item.value}）" if item.value_raw else str(item.value)
+            )
             lines.append(
                 "| {id} | {source_id} | {entity} | {metric} | {value} | {unit} | {period} | {scope} | {quote} |".format(
                     id=item.id,

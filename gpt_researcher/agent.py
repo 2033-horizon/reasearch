@@ -484,6 +484,10 @@ class GPTResearcher:
         """
         if self.is_sub_researcher or not getattr(self.cfg, "evidence_extraction_enabled", False):
             return
+        previous_step = self._current_step
+        # Attribute evidence LLM spending to its own step so cost accounting
+        # separates extraction from the rest of the research.
+        self._current_step = "evidence"
         try:
             layer = EvidenceLayer(
                 self.cfg,
@@ -507,6 +511,8 @@ class GPTResearcher:
             logging.getLogger(__name__).error(
                 f"Evidence layer failed: {e}", exc_info=True
             )
+        finally:
+            self._current_step = previous_step
 
     async def write_report(
         self,

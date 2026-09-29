@@ -38,6 +38,7 @@
         'gpt-researcher/gptr/example',
         'gpt-researcher/gptr/deep_research',
         'gpt-researcher/gptr/image_generation',
+        'gpt-researcher/gptr/evidence-layer',
         'gpt-researcher/gptr/ai-development',
         'gpt-researcher/gptr/config',
         'gpt-researcher/gptr/scraping',

@@ -132,3 +132,9 @@ export RETRIEVER=tavily,openalex,semantic_scholar
 
 Please note that you might need to export additional env vars and obtain API keys for other supported search retrievers and LLM providers. Please follow your console logs for further assistance.
 To learn more about additional LLM support you can check out the docs [here](/docs/gpt-researcher/llms/llms).
+
+## Evidence Layer Configuration
+
+The optional evidence layer turns scraped sources into a downloadable, tiered evidence product (JSON + Markdown) with quote-verified evidence items. It is controlled by `EVIDENCE_EXTRACTION_ENABLED` (default `false`) plus a handful of extraction/chunking/concurrency limits (`EVIDENCE_LLM`, `EVIDENCE_MAX_SOURCES`, `EVIDENCE_MAX_CHARS_PER_SOURCE`, `EVIDENCE_CHUNK_SIZE`, `EVIDENCE_CHUNK_OVERLAP`, `EVIDENCE_CONCURRENCY`, `RELIABILITY_RULES_PATH`, `TIER_CACHE_PATH`).
+
+See [证据层 / Evidence Layer](/docs/gpt-researcher/gptr/evidence-layer) for the full option table, artifact schema, rule-table maintenance and tier-cache promotion workflow.

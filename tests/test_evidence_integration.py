@@ -48,6 +48,9 @@ def _patch_layer_llm(monkeypatch, items=None):
     items = items if items is not None else [EVIDENCE_ITEM]
 
     async def fake_create_chat_completion(*args, **kwargs):
+        cost_callback = kwargs.get("cost_callback")
+        if cost_callback:
+            cost_callback(0.001)
         prompt = kwargs["messages"][-1]["content"]
         if "来源分级" in prompt:
             return '{"tier": "C", "publisher": "某站点", "org_type": "portal"}'
@@ -134,6 +137,11 @@ async def test_enabled_top_level_produces_artifact_paths_and_events(monkeypatch,
     assert [e["content"] for e in events] == ["started", "completed"]
     assert events[1]["metadata"]["by_tier"]["A"] == 1
     assert events[1]["metadata"]["evidence"] == len(artifact.evidence)
+
+    # Evidence LLM spend lands in the existing cost statistics, attributed
+    # to its own step so it is separately auditable.
+    assert researcher.research_costs > 0
+    assert researcher.step_costs.get("evidence", 0) > 0
 
 
 @pytest.mark.asyncio

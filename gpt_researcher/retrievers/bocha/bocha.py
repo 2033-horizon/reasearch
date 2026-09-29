@@ -2,9 +2,18 @@
 
 # libraries
 import os
+import re
 import requests
 import json
 import logging
+
+from gpt_researcher.utils.domains import normalize_domain
+
+# Google-style site:domain operators, which the BoCha web-search API does not
+# support (it would treat "site:" as literal query text).
+_SITE_OPERATOR_PATTERN = re.compile(r"site:(\S+)", re.IGNORECASE)
+
+_MAX_INCLUDE_DOMAINS = 100
 
 
 class BoChaSearch():
@@ -22,6 +31,36 @@ class BoChaSearch():
         self.query_domains = query_domains or None
         self.api_key = os.environ["BOCHA_API_KEY"]
 
+    def _build_payload(self, max_results: int) -> dict:
+        """Build the request body, translating domain targeting to ``include``.
+
+        ``query_domains`` and any site: operators in the query are normalized
+        to hosts, de-duplicated (order preserved), capped at 100 and joined
+        with ``|``. When nothing remains the field is omitted entirely, so
+        calls without domain targeting keep the previous request shape.
+        """
+        query = self.query or ""
+        include = [normalize_domain(domain) for domain in (self.query_domains or [])]
+
+        site_tokens = _SITE_OPERATOR_PATTERN.findall(query)
+        if site_tokens:
+            query = _SITE_OPERATOR_PATTERN.sub("", query)
+            query = re.sub(r"\s+", " ", query).strip()
+            include.extend(normalize_domain(token.strip(",")) for token in site_tokens)
+
+        include = list(dict.fromkeys(domain for domain in include if domain))
+        include = include[:_MAX_INCLUDE_DOMAINS]
+
+        data = {
+            "query": query,
+            "freshness": "noLimit",  # 搜索的时间范围，
+            "summary": True,  # 是否返回长文本摘要
+            "count": max_results,
+        }
+        if include:
+            data["include"] = "|".join(include)
+        return data
+
     def search(self, max_results=7) -> list[dict[str]]:
         """
         Searches the query
@@ -33,12 +72,7 @@ class BoChaSearch():
             'Authorization': f'Bearer {self.api_key}',  # 请替换为你的API密钥
             'Content-Type': 'application/json'
         }
-        data = {
-            "query": self.query,
-            "freshness": "noLimit",  # 搜索的时间范围，
-            "summary": True,  # 是否返回长文本摘要
-            "count": max_results
-        }
+        data = self._build_payload(max_results)
 
         try:
             response = requests.post(url, headers=headers, json=data, timeout=10)

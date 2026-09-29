@@ -55,4 +55,15 @@ DEFAULT_CONFIG: BaseConfig = {
     "IMAGE_GENERATION_ENABLED": False,  # Master switch for inline image generation
     "IMAGE_GENERATION_STYLE": "dark",  # Image style: "dark" (matches app theme), "light", or "auto"
     "IMAGE_GENERATION_PROVIDER": "google",  # Image provider: "google" or "modelslab"
+
+    # Evidence layer settings (off by default so existing behaviour is unchanged)
+    "EVIDENCE_EXTRACTION_ENABLED": False,  # Master switch for the evidence layer
+    "EVIDENCE_LLM": "fast",  # "fast" or "smart" LLM for tier fallback + extraction
+    "EVIDENCE_MAX_SOURCES": 100,  # Cap on sources processed per research
+    "EVIDENCE_MAX_CHARS_PER_SOURCE": 30000,  # Truncate each source's content
+    "EVIDENCE_CHUNK_SIZE": 8000,  # Extraction chunk size in characters
+    "EVIDENCE_CHUNK_OVERLAP": 400,  # Extraction chunk overlap in characters
+    "EVIDENCE_CONCURRENCY": 4,  # Concurrent extraction chunks
+    "RELIABILITY_RULES_PATH": "",  # Empty -> packaged default rule table
+    "TIER_CACHE_PATH": "data/tier_cache.json",  # LLM tier judgements cache
 }

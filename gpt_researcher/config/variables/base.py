@@ -49,3 +49,13 @@ class BaseConfig(TypedDict):
     IMAGE_GENERATION_ENABLED: bool
     IMAGE_GENERATION_STYLE: str  # Image style: "dark", "light", or "auto"
     IMAGE_GENERATION_PROVIDER: str  # Image provider: "google" or "modelslab"
+    # Evidence layer settings
+    EVIDENCE_EXTRACTION_ENABLED: bool
+    EVIDENCE_LLM: str
+    EVIDENCE_MAX_SOURCES: int
+    EVIDENCE_MAX_CHARS_PER_SOURCE: int
+    EVIDENCE_CHUNK_SIZE: int
+    EVIDENCE_CHUNK_OVERLAP: int
+    EVIDENCE_CONCURRENCY: int
+    RELIABILITY_RULES_PATH: str
+    TIER_CACHE_PATH: str

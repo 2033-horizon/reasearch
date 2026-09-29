@@ -16,9 +16,11 @@ from .actions import (
     extract_sections,
     get_retrievers,
     get_search_results,
+    stream_output,
     table_of_contents,
 )
 from .config import Config
+from .evidence import EvidenceLayer
 from .llm_provider import GenericLLMProvider
 from .memory import Memory
 from .prompts import get_prompt_family
@@ -80,6 +82,7 @@ class GPTResearcher:
         mcp_configs: list[dict] | None = None,
         mcp_max_iterations: int | None = None,
         mcp_strategy: str | None = None,
+        is_sub_researcher: bool = False,
         **kwargs
     ):
         """
@@ -134,6 +137,9 @@ class GPTResearcher:
                 - "fast" (default): Run MCP once with original query for best performance
                 - "deep": Run MCP for all sub-queries for maximum thoroughness  
                 - "disabled": Skip MCP entirely, use only web retrievers
+            is_sub_researcher (bool): True when this instance is a nested researcher
+                created for a sub-query/subtopic. Sub-researchers never trigger the
+                evidence layer (ADR-0001); only the top-level researcher does.
         """
         self.kwargs = kwargs
         self.query = query
@@ -196,6 +202,9 @@ class GPTResearcher:
         self.image_generator: Optional[ImageGenerator] = ImageGenerator(self)
         self.available_images: list = []  # Pre-generated images ready for embedding
         self._research_id: str = ""  # Unique ID for this research session
+        self.is_sub_researcher = is_sub_researcher
+        self.evidence_artifact = None  # Set by the evidence layer when enabled
+        self.evidence_artifact_paths: dict[str, str] = {}
 
         # Handle MCP strategy configuration with backwards compatibility
         self.mcp_strategy = self._resolve_mcp_strategy(mcp_strategy, mcp_max_iterations)
@@ -350,7 +359,11 @@ class GPTResearcher:
         # Handle deep research separately
         if self.report_type == ReportType.DeepResearch.value and self.deep_researcher:
             self._current_step = "deep_research"
-            return await self._handle_deep_research(on_progress)
+            context = await self._handle_deep_research(on_progress)
+            # Ticket 03: deep path also triggers the evidence layer, after the
+            # sub-research sources have been aggregated onto this researcher.
+            await self._run_evidence_layer()
+            return context
 
         if not (self.agent and self.role):
             self._current_step = "agent_selection"
@@ -382,7 +395,11 @@ class GPTResearcher:
         await self._log_event("research", step="research_completed", details={
             "context_length": len(self.context)
         })
-        
+
+        # Evidence layer runs automatically for the top-level researcher once
+        # research has finished (ADR-0001), controlled by EVIDENCE_EXTRACTION_ENABLED.
+        await self._run_evidence_layer()
+
         # Pre-generate images if enabled (happens BEFORE report writing for better UX)
         self.available_images = []
         if self.image_generator and self.image_generator.is_enabled():
@@ -447,6 +464,49 @@ class GPTResearcher:
 
         # Return the research context
         return self.context
+
+    async def _emit_evidence_event(self, event: dict) -> None:
+        """Stream one evidence-layer progress event over the websocket."""
+        await stream_output(
+            "evidence",
+            str(event.get("status") or "evidence"),
+            event.get("message") or "",
+            self.websocket,
+            metadata=event,
+        )
+
+    async def _run_evidence_layer(self) -> None:
+        """Build the evidence artifact for this (top-level) research, if enabled.
+
+        Suppressed on sub-researchers (deep sub-queries / detailed subtopics) so
+        extraction runs once, over all aggregated sources (ADR-0001). Failures
+        are logged and never abort the research itself.
+        """
+        if self.is_sub_researcher or not getattr(self.cfg, "evidence_extraction_enabled", False):
+            return
+        try:
+            layer = EvidenceLayer(
+                self.cfg,
+                cost_callback=self.add_costs,
+                on_event=self._emit_evidence_event,
+            )
+            artifact = await layer.build(
+                self.research_sources,
+                research_id=self._generate_research_id(),
+                query=self.query,
+            )
+            self.evidence_artifact = artifact
+            self.evidence_artifact_paths = artifact.save("outputs")
+            await self._log_event("research", step="evidence_completed", details={
+                "paths": self.evidence_artifact_paths,
+                "summary": artifact.summary,
+            })
+        except Exception as e:
+            self.evidence_artifact = None
+            import logging
+            logging.getLogger(__name__).error(
+                f"Evidence layer failed: {e}", exc_info=True
+            )
 
     async def write_report(
         self,

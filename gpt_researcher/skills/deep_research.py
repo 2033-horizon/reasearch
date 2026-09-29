@@ -442,6 +442,9 @@ Return ONLY a JSON object using this exact schema:
                         config_path=self.config_path,
                         headers=self.headers,
                         visited_urls=self.visited_urls,
+                        # Nested researchers never trigger the evidence layer;
+                        # the top-level deep researcher covers all sub-sources.
+                        is_sub_researcher=True,
                         # Propagate MCP configuration to nested researchers
                         mcp_configs=self.researcher.mcp_configs,
                         mcp_strategy=self.researcher.mcp_strategy

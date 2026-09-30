@@ -872,6 +872,9 @@ const GPTResearcher = (() => {
           displaySubQuestions(data.metadata)
         }
         addAgentResponse(data)
+      } else if (data.type === 'evidence' || data.type === 'adjudication') {
+        // Evidence layer and adjudication progress (tiers, clustering, verdicts)
+        addAgentResponse(data)
       } else if (data.type === 'images') {
         console.log("Received images:", data);  // Debug log
         displaySelectedImages(data)

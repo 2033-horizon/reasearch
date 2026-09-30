@@ -13,6 +13,7 @@ conservative repost merging and conflict resolution on top.
 
 from __future__ import annotations
 
+import asyncio
 import difflib
 import json
 import logging
@@ -49,6 +50,13 @@ _UNKNOWN_RANK = len(_TIER_RANK)
 
 REPOST_SIMILARITY = 0.9
 REPOST_UNCERTAIN_SIMILARITY = 0.75
+
+# LLM judgements are independent per pair; run them concurrently (order of
+# results is still preserved) so a large evidence set does not serialise into
+# thousands of round trips. Progress events keep the UI moving meanwhile.
+JUDGE_CONCURRENCY = 8
+JUDGE_PROGRESS_EVERY = 20
+GROUP_PROGRESS_EVERY = 25
 
 _ATTRIBUTION_RE = re.compile(r"(?:来源|转自|摘自|据)\s*[:：]?\s*([\u4e00-\u9fffA-Za-z0-9.]{2,30})")
 
@@ -246,6 +254,9 @@ class Adjudicator:
         self.llm = llm
         self.cache = cache if cache is not None else JudgementCache()
         self.on_event = on_event
+        self._judge_gate = asyncio.Semaphore(JUDGE_CONCURRENCY)
+        self._llm_judgements = 0
+        self._cache_hits = 0
 
     async def _emit(self, event: dict[str, Any]) -> None:
         if not self.on_event:
@@ -286,8 +297,25 @@ class Adjudicator:
             }
         )
 
-        for group in groups:
+        completed_groups = 0
+
+        async def _adjudicate_one(group: EvidenceGroup) -> None:
+            nonlocal completed_groups
             await self._adjudicate_group(group, items_by_id, source_by_id)
+            completed_groups += 1
+            if completed_groups % GROUP_PROGRESS_EVERY == 0:
+                await self._emit(
+                    {
+                        "status": "adjudicating",
+                        "message": (
+                            f"⚖️ 裁决进行中：已完成 {completed_groups}/{len(groups)} 组"
+                        ),
+                        "groups_done": completed_groups,
+                        "groups_total": len(groups),
+                    }
+                )
+
+        await asyncio.gather(*(_adjudicate_one(group) for group in groups))
 
         verdicts = {status: 0 for status in (
             VERDICT_ACCEPTED,
@@ -380,14 +408,21 @@ class Adjudicator:
                 return partition, []
 
         logs: list[dict[str, Any]] = []
-        if self.llm is None:
+        if self.llm is None or not partitions:
             return None, logs
-        for partition in partitions:
-            other = partition["scope"]
-            key = "|".join(sorted([normalized, _norm(other)]))
-            result, from_cache = await self._judge(
-                "scope_relation", key, build_scope_relation_prompt(scope, other)
+        # Same concurrent judging + ordered replay as _match_metric.
+        judgements = await asyncio.gather(
+            *(
+                self._judge(
+                    "scope_relation",
+                    "|".join(sorted([normalized, _norm(partition["scope"])])),
+                    build_scope_relation_prompt(scope, partition["scope"]),
+                )
+                for partition in partitions
             )
+        )
+        for partition, (result, from_cache) in zip(partitions, judgements):
+            other = partition["scope"]
             relation = str((result or {}).get("relation") or "").lower()
             if relation in {"same", "compatible"}:
                 logs.append(
@@ -423,13 +458,21 @@ class Adjudicator:
         for other in existing:
             if normalized == _norm(other):
                 return other, None
-        if self.llm is None:
+        if self.llm is None or not existing:
             return None, None
-        for other in existing:
-            key = "|".join(sorted([normalized, _norm(other)]))
-            result, from_cache = await self._judge(
-                "metric_synonym", key, build_metric_synonym_prompt(metric, other)
+        # Judge every candidate pair concurrently but replay the results in
+        # order, so the same first-match semantics are kept.
+        judgements = await asyncio.gather(
+            *(
+                self._judge(
+                    "metric_synonym",
+                    "|".join(sorted([normalized, _norm(other)])),
+                    build_metric_synonym_prompt(metric, other),
+                )
+                for other in existing
             )
+        )
+        for other, (result, from_cache) in zip(existing, judgements):
             if (result or {}).get("same") is True:
                 return other, {
                     "type": "metric_merged",
@@ -445,14 +488,29 @@ class Adjudicator:
         """Return (judgement, from_cache); caches successful LLM judgements."""
         cached = self.cache.get(kind, key) if self.cache is not None else None
         if isinstance(cached, dict):
+            self._cache_hits += 1
             return cached, True
         if self.llm is None:
             return None, False
         try:
-            response = await self.llm(prompt)
+            async with self._judge_gate:
+                response = await self.llm(prompt)
         except Exception as exc:
             logger.warning("Adjudication LLM call failed (%s): %s", kind, exc)
             return None, False
+        self._llm_judgements += 1
+        if self._llm_judgements % JUDGE_PROGRESS_EVERY == 0:
+            await self._emit(
+                {
+                    "status": "judging",
+                    "message": (
+                        f"🧩 指标/口径判定中：已完成 {self._llm_judgements} 项"
+                        f"（缓存命中 {self._cache_hits} 项）"
+                    ),
+                    "llm_judgements": self._llm_judgements,
+                    "cache_hits": self._cache_hits,
+                }
+            )
         parsed = parse_json_object(response)
         if not parsed:
             return None, False

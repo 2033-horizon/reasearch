@@ -39,13 +39,16 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv(ROOT / ".env", override=False)
 
 from gpt_researcher import GPTResearcher  # noqa: E402
-from gpt_researcher.evidence import AdjudicationRules, EvidenceStore  # noqa: E402
+from gpt_researcher.evidence import (  # noqa: E402
+    PENDING_STATUSES,
+    AdjudicationRules,
+    EvidenceStore,
+)
 from gpt_researcher.evidence.extraction import fold_text  # noqa: E402
 from gpt_researcher.evidence.writing import CITATION_TOKEN_RE  # noqa: E402
 from gpt_researcher.utils.enum import ReportType  # noqa: E402
 
 SAMPLE_SIZE = 20
-PENDING_STATUSES = {"conflict_pending", "insufficient_pending"}
 
 
 def _source_content_map(sources) -> dict[str, str]:
@@ -93,10 +96,12 @@ def _check_policy(artifact, rules: AdjudicationRules, failures: list[str]) -> No
         f"{sum(1 for g in groups if g.status in PENDING_STATUSES)} 个待审、"
         f"{len(cross_source)} 个跨来源组、{len(conflicts)} 个冲突待审）"
     )
+    # 验收要求抽查样本里同时出现跨来源一致组与冲突待审组；缺失说明本次检索
+    # 数据不足以支撑验收，换更丰富的查询重跑，而不是降低验收标准。
     if not cross_source:
-        print("    WARN: 本次检索未形成跨来源一致组（检索结果决定，可换更丰富的查询重跑）")
+        failures.append("未形成跨来源一致组（验收要求至少一个，请换更丰富的查询重跑）")
     if not conflicts:
-        print("    WARN: 本次检索未出现冲突待审组（非代码问题）")
+        failures.append("未出现冲突待审组（验收要求至少一个，请换更丰富的查询重跑）")
 
 
 async def _check_report_and_docx(researcher, artifact, failures: list[str]) -> str:

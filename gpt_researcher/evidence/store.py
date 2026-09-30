@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .models import (
+    PENDING_STATUSES,
     SCHEMA_VERSION,
     SCHEMA_VERSION_ADJUDICATED,
     EvidenceArtifact,
@@ -442,8 +443,10 @@ class EvidenceStore:
         artifact = self.load_artifact(run_id)
         return [group.to_dict() for group in artifact.groups] if artifact and artifact.groups else []
 
-    def group_details(self, run_id: int, group_id: str) -> dict[str, Any] | None:
-        artifact = self.load_artifact(run_id)
+    @staticmethod
+    def _group_details_from_artifact(
+        artifact: EvidenceArtifact | None, group_id: str
+    ) -> dict[str, Any] | None:
         if artifact is None:
             return None
         group = next((g for g in artifact.groups or [] if g.id == group_id), None)
@@ -464,14 +467,20 @@ class EvidenceStore:
         ]
         return details
 
+    def group_details(self, run_id: int, group_id: str) -> dict[str, Any] | None:
+        return self._group_details_from_artifact(self.load_artifact(run_id), group_id)
+
     def pending_group_details(self, research_id: str) -> list[dict[str, Any]]:
         run = self.latest_run(research_id)
         if run is None:
             return []
+        artifact = self.load_artifact(int(run["run_id"]))
+        if artifact is None:
+            return []
         details: list[dict[str, Any]] = []
-        for group in self.groups_for_run(int(run["run_id"])):
-            if group.get("effective_status") in {"conflict_pending", "insufficient_pending"}:
-                full = self.group_details(int(run["run_id"]), group["id"])
+        for group in artifact.groups or []:
+            if group.effective_status in PENDING_STATUSES:
+                full = self._group_details_from_artifact(artifact, group.id)
                 if full:
                     details.append(full)
         return details
@@ -495,8 +504,14 @@ class EvidenceStore:
         group = self.group_details(int(run["run_id"]), group_id)
         if group is None:
             raise KeyError(f"group {group_id} not found for research {research_id}")
-        if action == "set_representative" and not representative_source_id:
-            raise ValueError("set_representative requires representative_source_id")
+        # 复核只处理例外项（待审证据组），见 CONTEXT.md「复核」。
+        if group.get("verdict", {}).get("status") not in PENDING_STATUSES:
+            raise ValueError("复核只处理待审证据组（conflict/insufficient pending）")
+        if action == "set_representative":
+            if not representative_source_id:
+                raise ValueError("set_representative requires representative_source_id")
+            if representative_source_id not in group.get("sources", []):
+                raise ValueError("representative_source_id 必须是该证据组的来源")
         created_at = _now_iso()
         with self._lock, self._conn:
             cursor = self._conn.execute(

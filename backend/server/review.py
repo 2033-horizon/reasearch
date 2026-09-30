@@ -22,10 +22,10 @@ from gpt_researcher.actions.report_generation import generate_report
 from gpt_researcher.config import Config
 from gpt_researcher.evidence import (
     EvidenceStore,
-    build_writing_plan,
+    build_plan_for_config,
     finalize_report,
 )
-from gpt_researcher.prompts import PromptFamily
+from gpt_researcher.prompts import PromptFamily, get_prompt_family
 from gpt_researcher.utils.enum import Tone
 
 try:
@@ -53,19 +53,30 @@ def _safe_name(research_id: str) -> str:
 
 
 async def _default_generate(config: Config) -> GenerateReport:
-    """Writing-stage LLM call: evidence context -> report markdown."""
+    """Writing-stage LLM call: evidence context -> report markdown.
+
+    Mirrors the basic report body-writing path (role/prompt family from the
+    configuration); introduction/conclusion were never part of the body and
+    are not re-run. Retrieval/scraping never happens here.
+    """
+    prompt_family = get_prompt_family(
+        getattr(config, "prompt_family", "default"), config
+    )
 
     async def generate(query: str, context: str) -> str:
         return await generate_report(
             query=query,
             context=context,
-            agent_role_prompt="你是市场调研分析师，只依据给定证据撰写可靠的中文报告。",
+            agent_role_prompt=(
+                getattr(config, "agent_role", None)
+                or "你是市场调研分析师，只依据给定证据撰写可靠的中文报告。"
+            ),
             report_type="research_report",
             tone=Tone.Objective,
             report_source="web",
             websocket=None,
             cfg=config,
-            prompt_family=PromptFamily,
+            prompt_family=prompt_family,
         )
 
     return generate
@@ -99,13 +110,7 @@ async def regenerate_report(
         if artifact is None:
             raise KeyError(f"run {run['run_id']} not found")
         config = config or Config()
-        plan = build_writing_plan(
-            artifact,
-            pending_appendix=bool(getattr(config, "report_pending_appendix", True)),
-            pending_blocks_report=bool(
-                getattr(config, "adjudication_pending_blocks_report", False)
-            ),
-        )
+        plan = build_plan_for_config(artifact, config)
         if plan.blocked:
             return {"success": False, "blocked": plan.blocked_message}
 
@@ -115,12 +120,17 @@ async def regenerate_report(
 
         version = store.next_version(research_id)
         paths = await _save_version_files(report_markdown, research_id, version)
-        store.record_run(artifact, version=version, report_paths=paths)
+        run_id = store.record_run(artifact, version=version, report_paths=paths)
+        # The evidence snapshot is re-exported from the store so the download
+        # carries the review records that produced this version (ticket 23).
+        evidence_paths = store.export_artifact(run_id)
         return {
             "success": True,
             "version": version,
+            "run_id": run_id,
             "report": report_markdown,
             "paths": paths,
+            "evidence": evidence_paths,
         }
     finally:
         if own_store:
@@ -148,9 +158,7 @@ async def evidence_overview(research_id: str) -> dict[str, Any]:
             "query": artifact.query,
             "summary": artifact.summary,
             "versions": store.list_runs(research_id),
-            "groups": [group.to_dict() for group in artifact.groups or []],
             "pending_groups": store.pending_group_details(research_id),
-            "citations": artifact.citations or {},
         }
     finally:
         store.close()
@@ -180,9 +188,15 @@ async def submit_review(research_id: str, request: Request) -> dict[str, Any]:
             reviewer=payload.get("reviewer") or None,
         )
         run = store.latest_run(research_id)
-        group = (
-            store.group_details(int(run["run_id"]), group_id) if run is not None else None
-        )
+        group = None
+        if run is not None:
+            group = store.group_details(int(run["run_id"]), group_id)
+            # Refresh the downloadable snapshot so it carries the review
+            # records (证据组 + 裁决结论 + 复核记录, ticket 23).
+            try:
+                store.export_artifact(int(run["run_id"]))
+            except Exception as exc:
+                logger.warning("Failed to re-export evidence snapshot: %s", exc)
         return {"success": True, "review": review, "group": group}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

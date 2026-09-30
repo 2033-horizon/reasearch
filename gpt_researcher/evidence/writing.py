@@ -14,7 +14,13 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .models import EvidenceArtifact, EvidenceGroup, EvidenceItem, SourceProfile
+from .models import (
+    PENDING_STATUSES,
+    EvidenceArtifact,
+    EvidenceGroup,
+    EvidenceItem,
+    SourceProfile,
+)
 
 CITATION_TOKEN_RE = re.compile(r"\[\^(\d+)\]")
 
@@ -123,7 +129,7 @@ def pending_appendix_markdown(artifact: EvidenceArtifact) -> str:
     pending = [
         group
         for group in artifact.groups or []
-        if group.effective_status in {"conflict_pending", "insufficient_pending"}
+        if group.effective_status in PENDING_STATUSES
     ]
     if not pending:
         return ""
@@ -199,7 +205,7 @@ def build_writing_plan(
     pending_count = sum(
         1
         for group in artifact.groups or []
-        if group.effective_status in {"conflict_pending", "insufficient_pending"}
+        if group.effective_status in PENDING_STATUSES
     )
     blocked_message = None
     if not citations:
@@ -212,6 +218,17 @@ def build_writing_plan(
         citations=citations,
         appendix=appendix,
         blocked_message=blocked_message,
+    )
+
+
+def build_plan_for_config(artifact: EvidenceArtifact, config: Any) -> WritingPlan:
+    """The single place mapping report settings onto the writing plan."""
+    return build_writing_plan(
+        artifact,
+        pending_appendix=bool(getattr(config, "report_pending_appendix", True)),
+        pending_blocks_report=bool(
+            getattr(config, "adjudication_pending_blocks_report", False)
+        ),
     )
 
 

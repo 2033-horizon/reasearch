@@ -4,7 +4,7 @@
 
 **Blocked by:** 07（聚类与裁决基线）
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 一次调研结束后，运行/来源/证据/证据组/裁决均可从库中查询，且与导出的产物内容一致
 - [ ] 产物 JSON + Markdown 由库导出，下载路径与 schema v2 契约不变

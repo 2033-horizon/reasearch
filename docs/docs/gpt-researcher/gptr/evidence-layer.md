@@ -252,11 +252,11 @@ resolution_order: [tier, recency]
 | --- | --- |
 | `GET /api/research/{research_id}/evidence` | 摘要、版本记录、证据组、待审组明细（含来源对比）与 citation 映射 |
 | `POST /api/research/{research_id}/reviews` | `{group_id, action: accept\|reject\|set_representative, representative_source_id?, reviewer?}` |
-| `POST /api/research/{research_id}/regenerate` | 只重跑写作阶段，产出 `v{n}` 新报告文件 |
+| `POST /api/research/{research_id}/regenerate` | 只重跑写作阶段（正文写作，与基础报告一致；不重新检索抓取，不含引言/结论），产出 `v{n}` 新报告文件与刷新后的证据快照 |
 
 ## 引用与脚注
 
-- 报告正文的每个数据点使用 Markdown 脚注语法 `[^n]`（n 为 citation 序号），文末含 `[^n]: 标题 — 发布主体（等级）· 日期 · URL` 定义区；`[n]` 形式的未知编号会被剔除，未使用的定义不输出。
+- 报告正文的每个数据点使用 Markdown 脚注语法 `[^n]`（n 为 citation 序号），文末含 `[^n]: 标题 — 发布主体（等级）· 日期 · URL` 定义区；未定义的 `[^n]` 编号会被剔除（不留悬空引用），未使用的定义不输出。其中"日期"当前取证据抓取日期（来源发布日期尚未采集）。
 - **Word 报告显示真脚注**：正文上标与当页底部脚注一一对应，URL 可点击；同一编号多处引用时每处显示独立编号、内容一致的脚注。实现为自研 OOXML 注入（不依赖 pandoc 等外部工具），转换测试离线校验 `word/footnotes.xml`、正文 `w:footnoteReference` 与超链接关系。
 - 人工验收步骤（Word/WPS）：打开 `outputs/*.docx`，确认当页底部脚注文本为"标题 — 发布主体（等级）· 日期 · URL"、URL 可点击；用 Word 另存为 PDF 后脚注仍保留。PDF 直出（未经 Word）无脚注，属阶段二范围外。
 - 待审数据默认列入报告附录"附录：待审数据（未采信）"（`REPORT_PENDING_APPENDIX=false` 关闭）；`ADJUDICATION_PENDING_BLOCKS_REPORT=true` 时存在待审组则暂停生成正文。有效结论为空时报告直接给出"证据不足"提示，不编造内容。

@@ -4,7 +4,7 @@
 
 **Blocked by:** 10（证据驱动写作）
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 - [x] 含脚注定义的报告 Markdown 转换出的 .docx 打开后，正文上标与当页脚注一一对应
 - [x] 脚注内容为"标题 — 发布主体（等级）· 日期 · URL"，URL 为可点击超链接

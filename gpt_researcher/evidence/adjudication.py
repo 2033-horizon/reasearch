@@ -112,6 +112,11 @@ def _tier_rank(source: SourceProfile | None) -> int:
     return _TIER_RANK.get(source.tier, _UNKNOWN_RANK) if source else _UNKNOWN_RANK
 
 
+def _recency_date(item: EvidenceItem) -> str:
+    """Day-granularity recency key (extracted_at is the best signal captured)."""
+    return (item.extracted_at or "")[:10]
+
+
 def _unique(items: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -642,9 +647,11 @@ class Adjudicator:
                 if len(winners) == 1:
                     return winners[0], "tier"
             elif rule == "recency":
+                # Day granularity: items extracted in the same run share the
+                # date, so same-tier conflicts stay pending (ticket 08) instead
+                # of resolving on arbitrary per-chunk timestamps.
                 dates = [
-                    max(item.extracted_at or "" for item in cluster)
-                    for cluster in clusters
+                    max(_recency_date(item) for item in cluster) for cluster in clusters
                 ]
                 newest = max(dates)
                 winners = [
@@ -756,7 +763,7 @@ class Adjudicator:
         right_rank = _tier_rank(source_by_id.get(right.source_id))
         if left_rank != right_rank:
             return left if left_rank < right_rank else right
-        left_time, right_time = left.extracted_at or "", right.extracted_at or ""
+        left_time, right_time = _recency_date(left), _recency_date(right)
         if left_time != right_time:
             return left if left_time < right_time else right
         return left if left.id <= right.id else right
@@ -781,9 +788,9 @@ class Adjudicator:
             for item in items
             if _tier_rank(source_by_id.get(item.source_id)) == best_rank
         ]
-        newest = max(item.extracted_at or "" for item in candidates)
+        newest = max(_recency_date(item) for item in candidates)
         picked = min(
-            (item for item in candidates if (item.extracted_at or "") == newest),
+            (item for item in candidates if _recency_date(item) == newest),
             key=lambda item: item.id,
         )
         return {

@@ -192,8 +192,9 @@ async def handle_start_command(websocket, data: str, manager):
     artifact = getattr(researcher, "evidence_artifact", None)
     if artifact is not None and artifact.groups is not None:
         file_paths["review"] = f"/review/{urllib.parse.quote(artifact.research_id)}"
-        file_paths["report_version"] = 1
-        _record_report_paths(researcher, file_paths)
+        file_paths["report_version"] = (
+            _record_report_paths(researcher, artifact.research_id, file_paths) or 1
+        )
     await send_file_paths(websocket, file_paths)
 
 
@@ -279,14 +280,20 @@ async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
     return {"pdf": pdf_path, "docx": docx_path, "md": md_path}
 
 
-def _record_report_paths(researcher, file_paths: Dict[str, Any]) -> None:
-    """Attach the initial report files to the evidence run row (best effort)."""
+def _record_report_paths(
+    researcher, research_id: str, file_paths: Dict[str, Any]
+) -> int | None:
+    """Attach the initial report files to the evidence run row (best effort).
+
+    Returns the stored report version so the ``path`` event reports the real
+    version instead of a hardcoded guess.
+    """
     run_id = getattr(researcher, "evidence_run_id", None)
     cfg = getattr(researcher, "cfg", None)
     db_path = getattr(cfg, "evidence_db_path", None) if cfg is not None else None
     db_path = db_path or os.getenv("EVIDENCE_DB_PATH", "")
     if not run_id or not db_path:
-        return
+        return None
     try:
         from gpt_researcher.evidence import EvidenceStore
 
@@ -296,10 +303,13 @@ def _record_report_paths(researcher, file_paths: Dict[str, Any]) -> None:
                 int(run_id),
                 {key: value for key, value in file_paths.items() if isinstance(value, str)},
             )
+            run = store.latest_run(research_id)
+            return int(run["version"]) if run is not None else None
         finally:
             store.close()
     except Exception as exc:
         logger.warning("Failed to record report paths for run %s: %s", run_id, exc)
+        return None
 
 
 async def send_file_paths(websocket, file_paths: Dict[str, str]):

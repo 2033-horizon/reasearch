@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 裁决策略表随包发布、默认生效，可被配置路径覆盖；文件缺失或非法时有明确报错或保守回退
 - [ ] 同一指标（实体+指标+期间+地域+单位相同）且口径一致的跨来源条目归入同一证据组；口径文本不同的条目拆为不同组

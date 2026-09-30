@@ -20,7 +20,7 @@ from .actions import (
     table_of_contents,
 )
 from .config import Config
-from .evidence import EvidenceLayer, build_writing_plan, finalize_report
+from .evidence import EvidenceLayer, build_plan_for_config, finalize_report
 from .llm_provider import GenericLLMProvider
 from .memory import Memory
 from .prompts import get_prompt_family
@@ -577,15 +577,7 @@ class GPTResearcher:
         # final markdown carries [^n] markers + footnote definitions.
         plan = None
         if self._evidence_writing_ready():
-            plan = build_writing_plan(
-                self.evidence_artifact,
-                pending_appendix=bool(
-                    getattr(self.cfg, "report_pending_appendix", True)
-                ),
-                pending_blocks_report=bool(
-                    getattr(self.cfg, "adjudication_pending_blocks_report", False)
-                ),
-            )
+            plan = build_plan_for_config(self.evidence_artifact, self.cfg)
             await self._log_event("research", step="writing_report", details={
                 "existing_headers": existing_headers,
                 "context_source": "evidence",

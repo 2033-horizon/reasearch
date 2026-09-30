@@ -119,6 +119,42 @@ async def test_path_event_includes_review_entry_for_adjudicated_runs(
 
 
 @pytest.mark.asyncio
+async def test_path_event_reports_store_version(monkeypatch, tmp_path, stub_report_files):
+    from gpt_researcher.evidence import EvidenceArtifact, EvidenceStore
+
+    db = tmp_path / "evidence.db"
+    store = EvidenceStore(str(db))
+    artifact = EvidenceArtifact(
+        research_id="research_abc",
+        query="q",
+        sources=[],
+        evidence=[],
+        rejected=[],
+        schema_version=2,
+        groups=[],
+    )
+    store.record_run(artifact, version=1)
+    run_id = store.record_run(artifact, version=2)
+    store.close()
+
+    researcher = SimpleNamespace(
+        evidence_artifact_paths={},
+        evidence_artifact=SimpleNamespace(groups=[], research_id="research_abc"),
+        evidence_run_id=run_id,
+        cfg=SimpleNamespace(evidence_db_path=str(db)),
+    )
+
+    output = _path_event(await _run(monkeypatch, tmp_path, researcher, stub_report_files))
+
+    assert output["report_version"] == 2
+
+    store = EvidenceStore(str(db))
+    runs = store.list_runs("research_abc")
+    store.close()
+    assert runs[-1]["report_paths"]["md"] == "outputs/report.md"
+
+
+@pytest.mark.asyncio
 async def test_path_event_without_groups_has_no_review_entry(
     monkeypatch, tmp_path, stub_report_files
 ):

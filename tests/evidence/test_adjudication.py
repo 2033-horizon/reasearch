@@ -331,6 +331,22 @@ async def test_irreconcilable_conflict_is_pending():
 
 
 @pytest.mark.asyncio
+async def test_same_tier_conflict_within_one_day_stays_pending():
+    # Recency is day-granular: extraction timestamps from the same run must
+    # not silently resolve a same-tier conflict (ticket 08: 进入待审).
+    sources = [_source("S-001", "a.example", "A"), _source("S-002", "b.example", "A")]
+    items = [
+        _item("E-001", "S-001", value=100, extracted_at="2026-09-29T01:00:00+00:00"),
+        _item("E-002", "S-002", value=200, extracted_at="2026-09-29T23:00:00+00:00"),
+    ]
+
+    groups = await _adjudicate(items, sources)
+
+    assert groups[0].verdict["status"] == "conflict_pending"
+    assert groups[0].verdict["resolution"] is None
+
+
+@pytest.mark.asyncio
 async def test_representative_prefers_best_tier_then_newest():
     sources = [
         _source("S-001", "blog.example", "C"),

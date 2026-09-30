@@ -158,7 +158,9 @@ def test_pending_groups_show_full_source_comparison(client):
     assert all(m["source"]["url"].startswith("https://") for m in members)
 
 
-def test_accept_records_reviewer_and_time_and_enters_citations(client):
+def test_accept_records_reviewer_and_time_and_enters_citations(client, tmp_path):
+    import json
+
     store, _ = _seed()
     store.close()
 
@@ -171,6 +173,14 @@ def test_accept_records_reviewer_and_time_and_enters_citations(client):
     review_record = response.json()["review"]
     assert review_record["reviewer"] == "张三"
     assert review_record["created_at"]
+
+    # The downloadable snapshot is refreshed with the review record.
+    snapshot = json.loads(
+        (tmp_path / "outputs" / "research_r12.evidence.json").read_text(encoding="utf-8")
+    )
+    reviewed = next(g for g in snapshot["groups"] if g["id"] == "G-001")
+    assert reviewed["review"]["reviewer"] == "张三"
+    assert reviewed["review"]["action"] == "accept"
 
     store = EvidenceStore(review._db_path())
     artifact = store.load_artifact(store.latest_run("research_r12")["run_id"])
@@ -192,7 +202,7 @@ def test_reject_excludes_group_from_effective_conclusions(client):
 
     response = client.post(
         "/api/research/research_r12/reviews",
-        json={"group_id": "G-002", "action": "reject", "reviewer": "李四"},
+        json={"group_id": "G-001", "action": "reject", "reviewer": "李四"},
     )
     assert response.status_code == 200
     assert response.json()["group"]["effective_status"] == "rejected"
@@ -200,9 +210,27 @@ def test_reject_excludes_group_from_effective_conclusions(client):
     store = EvidenceStore(review._db_path())
     artifact = store.load_artifact(store.latest_run("research_r12")["run_id"])
     store.close()
+    group = next(g for g in artifact.groups if g.id == "G-001")
+    assert group.effective_status == "rejected"
     assert all(
-        entry["group_id"] != "G-002" for entry in (artifact.citations or {}).values()
+        entry["group_id"] != "G-001" for entry in (artifact.citations or {}).values()
     )
+    # A rejected pending group no longer appears in the review queue.
+    overview = client.get("/api/research/research_r12/evidence").json()
+    assert overview["pending_groups"] == []
+
+
+def test_reviews_are_limited_to_pending_groups(client):
+    store, _ = _seed()
+    store.close()
+
+    response = client.post(
+        "/api/research/research_r12/reviews",
+        json={"group_id": "G-002", "action": "reject", "reviewer": "李四"},
+    )
+
+    assert response.status_code == 400
+    assert "待审" in response.json()["detail"]
 
 
 def test_set_representative_overrides_citations(client):
@@ -214,6 +242,16 @@ def test_set_representative_overrides_citations(client):
         json={"group_id": "G-001", "action": "set_representative"},
     )
     assert missing.status_code == 400
+
+    foreign = client.post(
+        "/api/research/research_r12/reviews",
+        json={
+            "group_id": "G-001",
+            "action": "set_representative",
+            "representative_source_id": "S-003",
+        },
+    )
+    assert foreign.status_code == 400
 
     response = client.post(
         "/api/research/research_r12/reviews",
@@ -239,7 +277,7 @@ def test_set_representative_overrides_citations(client):
     assert citation["url"] == "https://b.example/x"
 
 
-def test_regenerate_writes_new_version_and_keeps_history(client, monkeypatch):
+def test_regenerate_writes_new_version_and_keeps_history(client, monkeypatch, tmp_path):
     store, _ = _seed()
     store.close()
     client.post(
@@ -256,8 +294,21 @@ def test_regenerate_writes_new_version_and_keeps_history(client, monkeypatch):
     payload = response.json()
     assert payload["version"] == 2
     assert payload["paths"]["md"].endswith(".v2.md")
+    assert payload["evidence"]["json"].endswith(".evidence.json")
     assert "[^1]" in payload["report"]
     assert "[^1]:" in payload["report"]
+
+    # The refreshed evidence snapshot carries the review record.
+    import json as json_module
+    import urllib.parse
+
+    snapshot = json_module.loads(
+        (tmp_path / urllib.parse.unquote(payload["evidence"]["json"])).read_text(
+            encoding="utf-8"
+        )
+    )
+    reviewed = next(g for g in snapshot["groups"] if g["id"] == "G-001")
+    assert reviewed["review"]["action"] == "accept"
 
     # Only the writing stage ran, with the evidence context as its input.
     assert generate.await_count == 1
@@ -305,7 +356,8 @@ def test_reviews_are_local_to_one_research(client):
     )
 
     other = client.get("/api/research/research_other/evidence").json()
-    assert other["groups"] == []
+    assert other["pending_groups"] == []
+    assert other["versions"][0]["version"] == 1
     store = EvidenceStore(review._db_path())
     assert store.reviews_for_run("research_other") == []
     store.close()

@@ -320,14 +320,22 @@ class EvidenceArtifact:
                 "",
                 "## 证据组与裁决",
                 "",
-                "| ID | 指标 | 口径 | 成员 | 独立来源 | 裁决 | 有效结论 | 代表值 | 依据 |",
-                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+                "| ID | 指标 | 口径 | 成员 | 独立来源 | 裁决 | 有效结论 | 代表值 | 依据 | 复核 |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
             ]
             for group in self.groups:
                 representative = group.representative or {}
                 value_text = representative.get("value_raw") or representative.get("value") or ""
+                review = group.review or {}
+                review_text = ""
+                if review:
+                    review_text = "{action}/{reviewer}/{at}".format(
+                        action=review.get("action", ""),
+                        reviewer=review.get("reviewer") or "-",
+                        at=review.get("reviewed_at", ""),
+                    )
                 lines.append(
-                    "| {id} | {metric} | {scope} | {members} | {independent} | {status} | {effective} | {value} | {reason} |".format(
+                    "| {id} | {metric} | {scope} | {members} | {independent} | {status} | {effective} | {value} | {reason} | {review} |".format(
                         id=group.id,
                         metric=_table_cell((group.key or {}).get("metric")),
                         scope=_table_cell(group.scope),
@@ -337,6 +345,7 @@ class EvidenceArtifact:
                         effective=group.effective_status,
                         value=_table_cell(value_text),
                         reason=_table_cell(group.verdict.get("reason")),
+                        review=_table_cell(review_text),
                     )
                 )
 

@@ -244,13 +244,28 @@ class EvidenceLayer:
         # One semaphore shared by every source so EVIDENCE_CONCURRENCY bounds
         # in-flight LLM calls for the whole run, not per source.
         gate = asyncio.Semaphore(self.extractor.concurrency)
-        results = await asyncio.gather(
-            *(
-                self.extractor.extract(
-                    profile.id, profile.url, contents[profile.id], semaphore=gate
-                )
-                for profile in profiles
+        completed_sources = 0
+
+        async def _extract_source(profile: SourceProfile):
+            nonlocal completed_sources
+            result = await self.extractor.extract(
+                profile.id, profile.url, contents[profile.id], semaphore=gate
             )
+            completed_sources += 1
+            await self._emit(
+                {
+                    "status": "extracting",
+                    "message": (
+                        f"🧾 证据抽取中：已完成 {completed_sources}/{len(profiles)} 个来源"
+                    ),
+                    "sources_done": completed_sources,
+                    "sources_total": len(profiles),
+                }
+            )
+            return result
+
+        results = await asyncio.gather(
+            *(_extract_source(profile) for profile in profiles)
         )
         for source_items, source_rejected in results:
             evidence.extend(source_items)

@@ -36,8 +36,8 @@ DEFAULT_CONFIG: BaseConfig = {
     "EMBEDDING_KWARGS": {},
     "VERBOSE": False,
     # Deep research specific settings
-    "DEEP_RESEARCH_BREADTH": 3,
-    "DEEP_RESEARCH_DEPTH": 2,
+    "DEEP_RESEARCH_BREADTH": 2,
+    "DEEP_RESEARCH_DEPTH": 1,
     "DEEP_RESEARCH_CONCURRENCY": 4,
     
     # MCP retriever specific settings

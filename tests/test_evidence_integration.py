@@ -134,9 +134,11 @@ async def test_enabled_top_level_produces_artifact_paths_and_events(monkeypatch,
     assert (tmp_path / paths["md"]).exists()
 
     events = _evidence_events(websocket)
-    assert [e["content"] for e in events] == ["started", "completed"]
-    assert events[1]["metadata"]["by_tier"]["A"] == 1
-    assert events[1]["metadata"]["evidence"] == len(artifact.evidence)
+    assert events[0]["content"] == "started"
+    assert events[-1]["content"] == "completed"
+    assert all(e["content"] == "extracting" for e in events[1:-1])
+    assert events[-1]["metadata"]["by_tier"]["A"] == 1
+    assert events[-1]["metadata"]["evidence"] == len(artifact.evidence)
 
     # Evidence LLM spend lands in the existing cost statistics, attributed
     # to its own step so it is separately auditable.
@@ -210,7 +212,9 @@ async def test_deep_path_triggers_after_sources_aggregated(monkeypatch, tmp_path
         "https://stats.gov.cn/deep",
         "https://unknown-blog.example/deep",
     }
-    assert [e["content"] for e in _evidence_events(websocket)] == ["started", "completed"]
+    evidence_events = _evidence_events(websocket)
+    assert evidence_events[0]["content"] == "started"
+    assert evidence_events[-1]["content"] == "completed"
 
 
 @pytest.mark.asyncio

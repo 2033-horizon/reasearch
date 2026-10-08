@@ -1,0 +1,932 @@
+{
+  "version": "1.0",
+  "created_on": "2026-10-08",
+  "baseline_commit": "0957c301ed06c2a5857b834358c7227c739041d4",
+  "prd": "../market-insight-agent-prd.md",
+  "common": "./COMMON.md",
+  "status": "planned",
+  "note": "依赖按前置产物已合入且验收可用计算；波次是拓扑分层，不是工期。所有功能尚未执行。",
+  "tickets": [
+    {
+      "id": "MI-001",
+      "title": "建立开发基线与离线业务样例",
+      "file": "./MI-001-baseline-fixtures.md",
+      "priority": "P0",
+      "prd_milestone": "M0",
+      "depends_on": [],
+      "wave": 0,
+      "features": [
+        "F12"
+      ],
+      "acceptance_cases": [],
+      "role": "评测与工程基础",
+      "integration_owner": "MI-024",
+      "status": "planned",
+      "owned_paths": [
+        "evals/market_insight/fixtures/",
+        "evals/market_insight/fixture_manifest.json",
+        "evals/market_insight/BASELINE.md",
+        "tests/market_insight/test_fixture_integrity.py"
+      ]
+    },
+    {
+      "id": "MI-002",
+      "title": "冻结证据模型、状态与模块接口",
+      "file": "./MI-002-contracts.md",
+      "priority": "P0",
+      "prd_milestone": "M0",
+      "depends_on": [],
+      "wave": 0,
+      "features": [
+        "F01",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F11"
+      ],
+      "acceptance_cases": [],
+      "role": "核心契约",
+      "integration_owner": "MI-009",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/__init__.py",
+        "gpt_researcher/market_insight/schemas.py",
+        "gpt_researcher/market_insight/ports.py",
+        "docs/product/market-insight-contracts.md",
+        "frontend/nextjs/types/market-insight.ts",
+        "tests/market_insight/test_contracts.py"
+      ]
+    },
+    {
+      "id": "MI-003",
+      "title": "实现证据存储、版本和审计基础",
+      "file": "./MI-003-storage-versions.md",
+      "priority": "P0",
+      "prd_milestone": "M1",
+      "depends_on": [
+        "MI-002"
+      ],
+      "wave": 1,
+      "features": [
+        "F03",
+        "F07",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T15",
+        "T20"
+      ],
+      "role": "后端存储",
+      "integration_owner": "MI-009",
+      "status": "planned",
+      "owned_paths": [
+        "backend/server/insight_store.py",
+        "backend/server/insight_storage/",
+        "backend/server/insight_migrations/",
+        "tests/market_insight/test_store.py"
+      ]
+    },
+    {
+      "id": "MI-004",
+      "title": "实现任务 API、身份与资源访问控制",
+      "file": "./MI-004-task-api-auth.md",
+      "priority": "P0",
+      "prd_milestone": "M1",
+      "depends_on": [
+        "MI-003"
+      ],
+      "wave": 2,
+      "features": [
+        "F01",
+        "F10",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T17",
+        "T21"
+      ],
+      "role": "后端 API",
+      "integration_owner": "MI-009",
+      "status": "planned",
+      "owned_paths": [
+        "backend/server/insight_routes.py",
+        "backend/server/insight/tasks.py",
+        "backend/server/insight/auth.py",
+        "backend/server/insight/dependencies.py",
+        "backend/server/app.py 的 insight 注册段",
+        "tests/market_insight/test_task_api.py",
+        "tests/market_insight/test_authorization.py"
+      ]
+    },
+    {
+      "id": "MI-005",
+      "title": "实现持久任务执行、预算、取消和恢复",
+      "file": "./MI-005-runtime-budget.md",
+      "priority": "P0",
+      "prd_milestone": "M1",
+      "depends_on": [
+        "MI-003"
+      ],
+      "wave": 2,
+      "features": [
+        "F02",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T14",
+        "T15",
+        "T16"
+      ],
+      "role": "后端运行时",
+      "integration_owner": "MI-009",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/budget.py",
+        "gpt_researcher/market_insight/events.py",
+        "backend/server/insight_worker.py",
+        "backend/server/insight/runtime.py",
+        "tests/market_insight/test_runtime_budget.py"
+      ]
+    },
+    {
+      "id": "MI-006",
+      "title": "实现 HTML 与文本 PDF 的证据采集",
+      "file": "./MI-006-html-pdf-evidence.md",
+      "priority": "P0",
+      "prd_milestone": "M1",
+      "depends_on": [
+        "MI-005"
+      ],
+      "wave": 3,
+      "features": [
+        "F03"
+      ],
+      "acceptance_cases": [
+        "T09",
+        "T10",
+        "T11",
+        "T18"
+      ],
+      "role": "证据采集",
+      "integration_owner": "MI-009",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/collectors/base.py",
+        "gpt_researcher/market_insight/collectors/web.py",
+        "gpt_researcher/market_insight/collectors/pdf.py",
+        "backend/server/insight/documents.py",
+        "tests/market_insight/test_collectors.py"
+      ]
+    },
+    {
+      "id": "MI-007",
+      "title": "实现主张抽取与指标口径标准化",
+      "file": "./MI-007-claim-extraction.md",
+      "priority": "P0",
+      "prd_milestone": "M1",
+      "depends_on": [
+        "MI-001",
+        "MI-006"
+      ],
+      "wave": 4,
+      "features": [
+        "F01",
+        "F05"
+      ],
+      "acceptance_cases": [
+        "T07",
+        "T08",
+        "T09",
+        "T10",
+        "T17"
+      ],
+      "role": "数据抽取",
+      "integration_owner": "MI-009",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/extractor.py",
+        "gpt_researcher/market_insight/normalization.py",
+        "gpt_researcher/market_insight/entity_resolution.py",
+        "tests/market_insight/test_extraction_normalization.py"
+      ]
+    },
+    {
+      "id": "MI-008",
+      "title": "实现发布主体目录与来源评级规则",
+      "file": "./MI-008-source-policy.md",
+      "priority": "P0",
+      "prd_milestone": "M1",
+      "depends_on": [
+        "MI-003"
+      ],
+      "wave": 2,
+      "features": [
+        "F04",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T01",
+        "T02",
+        "T05",
+        "T08",
+        "T18"
+      ],
+      "role": "来源政策",
+      "integration_owner": "MI-009",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/source_registry.py",
+        "gpt_researcher/market_insight/source_policy.py",
+        "gpt_researcher/market_insight/policies/",
+        "backend/server/insight/source_policies.py",
+        "tests/market_insight/test_source_policy.py"
+      ]
+    },
+    {
+      "id": "MI-009",
+      "title": "实现单证据采纳与最小可演示闭环",
+      "file": "./MI-009-single-source-milestone.md",
+      "priority": "P0",
+      "prd_milestone": "M1",
+      "depends_on": [
+        "MI-004",
+        "MI-005",
+        "MI-007",
+        "MI-008"
+      ],
+      "wave": 5,
+      "features": [
+        "F01",
+        "F03",
+        "F04",
+        "F05",
+        "F07",
+        "F09",
+        "F10",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T01",
+        "T09",
+        "T11",
+        "T12",
+        "T14"
+      ],
+      "role": "M1 集成与核验",
+      "integration_owner": "MI-009",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/verifier.py 的单证据入口",
+        "gpt_researcher/market_insight/workflow.py 的 M1 组合",
+        "gpt_researcher/market_insight/preview.py",
+        "backend/server/insight_routes.py 的 M1 注册",
+        "tests/market_insight/test_single_source_flow.py"
+      ]
+    },
+    {
+      "id": "MI-010",
+      "title": "实现研究范围规划与分层搜索",
+      "file": "./MI-010-research-search-plan.md",
+      "priority": "P0",
+      "prd_milestone": "M2",
+      "depends_on": [
+        "MI-004",
+        "MI-006",
+        "MI-008"
+      ],
+      "wave": 4,
+      "features": [
+        "F01",
+        "F02"
+      ],
+      "acceptance_cases": [
+        "T02",
+        "T08",
+        "T17"
+      ],
+      "role": "搜索规划",
+      "integration_owner": "MI-014",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/planning.py",
+        "gpt_researcher/market_insight/search.py",
+        "gpt_researcher/market_insight/templates/",
+        "tests/market_insight/test_search_planning.py"
+      ]
+    },
+    {
+      "id": "MI-011",
+      "title": "补齐 CSV/XLSX 与附件表格证据",
+      "file": "./MI-011-tables-attachments.md",
+      "priority": "P0",
+      "prd_milestone": "M2",
+      "depends_on": [
+        "MI-006"
+      ],
+      "wave": 4,
+      "features": [
+        "F03",
+        "F05"
+      ],
+      "acceptance_cases": [
+        "T09",
+        "T10",
+        "T11"
+      ],
+      "role": "文档与表格解析",
+      "integration_owner": "MI-014",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/collectors/tabular.py",
+        "gpt_researcher/market_insight/collectors/attachments.py",
+        "tests/market_insight/test_tabular_evidence.py"
+      ]
+    },
+    {
+      "id": "MI-012",
+      "title": "识别原始出处、转载与独立证据族",
+      "file": "./MI-012-origin-independence.md",
+      "priority": "P0",
+      "prd_milestone": "M3",
+      "depends_on": [
+        "MI-007",
+        "MI-008"
+      ],
+      "wave": 5,
+      "features": [
+        "F06"
+      ],
+      "acceptance_cases": [
+        "T03",
+        "T04",
+        "T05"
+      ],
+      "role": "来源关系",
+      "integration_owner": "MI-013",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/provenance.py",
+        "tests/market_insight/test_origin_independence.py"
+      ]
+    },
+    {
+      "id": "MI-013",
+      "title": "实现交叉核验、口径冲突与版本优先",
+      "file": "./MI-013-cross-verification.md",
+      "priority": "P0",
+      "prd_milestone": "M3",
+      "depends_on": [
+        "MI-009",
+        "MI-012"
+      ],
+      "wave": 6,
+      "features": [
+        "F06",
+        "F07"
+      ],
+      "acceptance_cases": [
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T08",
+        "T14"
+      ],
+      "role": "核验引擎",
+      "integration_owner": "MI-014",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/verifier.py 的交叉核验扩展",
+        "gpt_researcher/market_insight/conflicts.py",
+        "tests/market_insight/test_verification_matrix.py"
+      ]
+    },
+    {
+      "id": "MI-014",
+      "title": "集成覆盖补搜、停止条件与完整证据流程",
+      "file": "./MI-014-research-verification-loop.md",
+      "priority": "P0",
+      "prd_milestone": "M3",
+      "depends_on": [
+        "MI-010",
+        "MI-011",
+        "MI-013"
+      ],
+      "wave": 7,
+      "features": [
+        "F02",
+        "F06",
+        "F07",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T03",
+        "T04",
+        "T05",
+        "T06",
+        "T14",
+        "T16"
+      ],
+      "role": "M2/M3 集成",
+      "integration_owner": "MI-014",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/workflow.py 的完整证据流程",
+        "gpt_researcher/market_insight/coverage.py",
+        "gpt_researcher/market_insight/followup_search.py",
+        "tests/market_insight/test_research_loop.py"
+      ]
+    },
+    {
+      "id": "MI-015",
+      "title": "实现人工复核、修订与影响传播",
+      "file": "./MI-015-review-invalidation.md",
+      "priority": "P0",
+      "prd_milestone": "M3",
+      "depends_on": [
+        "MI-004",
+        "MI-013"
+      ],
+      "wave": 7,
+      "features": [
+        "F07",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T14",
+        "T20",
+        "T21"
+      ],
+      "role": "复核服务",
+      "integration_owner": "MI-018",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/review.py",
+        "gpt_researcher/market_insight/invalidation.py",
+        "backend/server/insight/reviews.py",
+        "backend/server/insight/claims.py",
+        "tests/market_insight/test_review_invalidation.py"
+      ]
+    },
+    {
+      "id": "MI-016",
+      "title": "实现可复算指标、分析结果与基础图表",
+      "file": "./MI-016-analysis-charts.md",
+      "priority": "P0",
+      "prd_milestone": "M4",
+      "depends_on": [
+        "MI-013"
+      ],
+      "wave": 7,
+      "features": [
+        "F08"
+      ],
+      "acceptance_cases": [
+        "T07",
+        "T13"
+      ],
+      "role": "分析计算",
+      "integration_owner": "MI-017",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/analysis.py",
+        "gpt_researcher/market_insight/charts.py",
+        "tests/market_insight/test_analysis.py"
+      ]
+    },
+    {
+      "id": "MI-017",
+      "title": "实现基于冻结证据的市场洞察报告生成",
+      "file": "./MI-017-controlled-report.md",
+      "priority": "P0",
+      "prd_milestone": "M4",
+      "depends_on": [
+        "MI-009",
+        "MI-016"
+      ],
+      "wave": 8,
+      "features": [
+        "F09"
+      ],
+      "acceptance_cases": [
+        "T01",
+        "T06",
+        "T12",
+        "T13"
+      ],
+      "role": "报告写作",
+      "integration_owner": "MI-018",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/report_writer.py",
+        "gpt_researcher/market_insight/report_templates.py",
+        "tests/market_insight/test_report_writer.py"
+      ]
+    },
+    {
+      "id": "MI-018",
+      "title": "实现全文核验与报告发布准入",
+      "file": "./MI-018-report-validation-publish.md",
+      "priority": "P0",
+      "prd_milestone": "M4",
+      "depends_on": [
+        "MI-014",
+        "MI-015",
+        "MI-017"
+      ],
+      "wave": 9,
+      "features": [
+        "F07",
+        "F09",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T12",
+        "T14",
+        "T16",
+        "T20",
+        "T22"
+      ],
+      "role": "报告质量与集成",
+      "integration_owner": "MI-018",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/report_validator.py",
+        "gpt_researcher/market_insight/publisher.py",
+        "gpt_researcher/market_insight/workflow.py 的分析/写作/发布组合",
+        "backend/server/insight/reports.py",
+        "backend/server/insight_routes.py 的复核/报告注册",
+        "tests/market_insight/test_report_gate.py"
+      ]
+    },
+    {
+      "id": "MI-019",
+      "title": "实现研究创建、进度和服务端历史界面",
+      "file": "./MI-019-task-ui.md",
+      "priority": "P0",
+      "prd_milestone": "M1 起、M4 收口",
+      "depends_on": [
+        "MI-009"
+      ],
+      "wave": 6,
+      "features": [
+        "F01",
+        "F10",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T15",
+        "T16",
+        "T17"
+      ],
+      "role": "前端任务界面",
+      "integration_owner": "MI-023",
+      "status": "planned",
+      "owned_paths": [
+        "frontend/nextjs/app/insight/page.tsx",
+        "frontend/nextjs/app/insight/[id]/page.tsx 的任务壳",
+        "frontend/nextjs/components/insight/TaskForm.tsx",
+        "frontend/nextjs/components/insight/TaskShell.tsx",
+        "frontend/nextjs/components/insight/TaskProgress.tsx",
+        "frontend/nextjs/hooks/useInsightTask.ts",
+        "frontend/nextjs/lib/insight-client.ts"
+      ]
+    },
+    {
+      "id": "MI-020",
+      "title": "实现证据台账、原文侧栏和复核界面",
+      "file": "./MI-020-evidence-review-ui.md",
+      "priority": "P0",
+      "prd_milestone": "M4",
+      "depends_on": [
+        "MI-015",
+        "MI-019"
+      ],
+      "wave": 8,
+      "features": [
+        "F04",
+        "F07",
+        "F10"
+      ],
+      "acceptance_cases": [
+        "T04",
+        "T06",
+        "T09",
+        "T20",
+        "T21"
+      ],
+      "role": "前端证据与复核",
+      "integration_owner": "MI-023",
+      "status": "planned",
+      "owned_paths": [
+        "frontend/nextjs/components/insight/EvidenceTable.tsx",
+        "frontend/nextjs/components/insight/EvidenceDrawer.tsx",
+        "frontend/nextjs/components/insight/ReviewQueue.tsx",
+        "frontend/nextjs/components/insight/ReviewForm.tsx",
+        "frontend/nextjs/lib/insight-evidence.ts"
+      ]
+    },
+    {
+      "id": "MI-021",
+      "title": "实现报告阅读与限定证据范围的追问",
+      "file": "./MI-021-report-ui-chat.md",
+      "priority": "P0",
+      "prd_milestone": "M4",
+      "depends_on": [
+        "MI-018",
+        "MI-019"
+      ],
+      "wave": 10,
+      "features": [
+        "F09",
+        "F10"
+      ],
+      "acceptance_cases": [
+        "T12",
+        "T19",
+        "T20",
+        "T21"
+      ],
+      "role": "报告界面与追问",
+      "integration_owner": "MI-023",
+      "status": "planned",
+      "owned_paths": [
+        "frontend/nextjs/components/insight/ReportPanel.tsx",
+        "frontend/nextjs/components/insight/ReportChat.tsx",
+        "gpt_researcher/market_insight/report_chat.py",
+        "backend/server/insight/chat.py",
+        "tests/market_insight/test_report_chat.py"
+      ]
+    },
+    {
+      "id": "MI-022",
+      "title": "实现报告与证据表导出",
+      "file": "./MI-022-exports.md",
+      "priority": "P0",
+      "prd_milestone": "M4",
+      "depends_on": [
+        "MI-018"
+      ],
+      "wave": 10,
+      "features": [
+        "F10"
+      ],
+      "acceptance_cases": [
+        "T09",
+        "T12",
+        "T21",
+        "T22"
+      ],
+      "role": "文档交付",
+      "integration_owner": "MI-023",
+      "status": "planned",
+      "owned_paths": [
+        "gpt_researcher/market_insight/exports.py",
+        "backend/server/insight/exports.py",
+        "tests/market_insight/test_exports.py"
+      ]
+    },
+    {
+      "id": "MI-023",
+      "title": "完成系统集成、恢复与运行加固",
+      "file": "./MI-023-integration-operations.md",
+      "priority": "P0",
+      "prd_milestone": "M5",
+      "depends_on": [
+        "MI-020",
+        "MI-021",
+        "MI-022"
+      ],
+      "wave": 11,
+      "features": [
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10",
+        "F11"
+      ],
+      "acceptance_cases": [
+        "T10",
+        "T14",
+        "T15",
+        "T16",
+        "T18",
+        "T20",
+        "T21"
+      ],
+      "role": "集成与运行验收",
+      "integration_owner": "MI-023",
+      "status": "planned",
+      "owned_paths": [
+        "backend/server/insight_routes.py 的最终注册",
+        "gpt_researcher/market_insight/workflow.py 的最终组合",
+        "frontend/nextjs/app/insight/[id]/page.tsx 的面板装配",
+        "tests/market_insight/test_integration.py",
+        "docs/product/market-insight-operations.md"
+      ]
+    },
+    {
+      "id": "MI-024",
+      "title": "完成业务质量评测与首期验收交付",
+      "file": "./MI-024-business-acceptance.md",
+      "priority": "P0",
+      "prd_milestone": "M5",
+      "depends_on": [
+        "MI-001",
+        "MI-023"
+      ],
+      "wave": 12,
+      "features": [
+        "F12"
+      ],
+      "acceptance_cases": [
+        "T01",
+        "T02",
+        "T03",
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T08",
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14",
+        "T15",
+        "T16",
+        "T17",
+        "T18",
+        "T19",
+        "T20",
+        "T21",
+        "T22"
+      ],
+      "role": "质量评测与验收",
+      "integration_owner": "MI-024",
+      "status": "planned",
+      "owned_paths": [
+        "evals/market_insight/run_eval.py",
+        "evals/market_insight/metrics.py",
+        "evals/market_insight/datasets/",
+        "evals/market_insight/results/",
+        "docs/product/market-insight-acceptance.md"
+      ]
+    },
+    {
+      "id": "MI-025",
+      "title": "扩展扫描件 OCR 与复杂表格",
+      "file": "./MI-025-ocr-complex-tables.md",
+      "priority": "P1",
+      "prd_milestone": "后续版本",
+      "depends_on": [
+        "MI-024"
+      ],
+      "wave": 13,
+      "features": [
+        "F13"
+      ],
+      "acceptance_cases": [
+        "T09",
+        "T10"
+      ],
+      "role": "高级文档解析",
+      "integration_owner": "本单在 P1 分支集成",
+      "status": "deferred",
+      "owned_paths": [
+        "gpt_researcher/market_insight/collectors/ocr.py",
+        "gpt_researcher/market_insight/collectors/complex_tables.py",
+        "tests/market_insight/test_ocr_evidence.py"
+      ]
+    },
+    {
+      "id": "MI-026",
+      "title": "接入一个授权专业数据源",
+      "file": "./MI-026-specialist-connector.md",
+      "priority": "P1",
+      "prd_milestone": "后续版本",
+      "depends_on": [
+        "MI-024"
+      ],
+      "wave": 13,
+      "features": [
+        "F14"
+      ],
+      "acceptance_cases": [
+        "T02",
+        "T08",
+        "T11",
+        "T21"
+      ],
+      "role": "数据连接器",
+      "integration_owner": "本单在 P1 分支集成",
+      "status": "deferred",
+      "owned_paths": [
+        "gpt_researcher/market_insight/connectors/选定服务/",
+        "tests/market_insight/test_specialist_connector.py"
+      ]
+    },
+    {
+      "id": "MI-027",
+      "title": "实现补搜后核验的报告追问",
+      "file": "./MI-027-verified-followup-chat.md",
+      "priority": "P1",
+      "prd_milestone": "后续版本",
+      "depends_on": [
+        "MI-024"
+      ],
+      "wave": 13,
+      "features": [
+        "F15"
+      ],
+      "acceptance_cases": [
+        "T12",
+        "T14",
+        "T16",
+        "T19",
+        "T20"
+      ],
+      "role": "追问研究",
+      "integration_owner": "本单在 P1 分支集成",
+      "status": "deferred",
+      "owned_paths": [
+        "gpt_researcher/market_insight/followup_chat.py",
+        "backend/server/insight/chat.py 的 P1 扩展",
+        "frontend/nextjs/components/insight/ReportChat.tsx 的 P1 扩展",
+        "tests/market_insight/test_verified_followup.py"
+      ]
+    },
+    {
+      "id": "MI-028",
+      "title": "实现 PDF 与品牌报告模板",
+      "file": "./MI-028-pdf-branding.md",
+      "priority": "P1",
+      "prd_milestone": "后续版本",
+      "depends_on": [
+        "MI-024"
+      ],
+      "wave": 13,
+      "features": [
+        "F15"
+      ],
+      "acceptance_cases": [
+        "T09",
+        "T12",
+        "T21",
+        "T22"
+      ],
+      "role": "高级报告交付",
+      "integration_owner": "本单在 P1 分支集成",
+      "status": "deferred",
+      "owned_paths": [
+        "gpt_researcher/market_insight/pdf_export.py",
+        "backend/styles/insight_pdf.css",
+        "gpt_researcher/market_insight/export_templates/",
+        "tests/market_insight/test_pdf_export.py"
+      ]
+    },
+    {
+      "id": "MI-029",
+      "title": "实现持续跟踪、增量更新与变更提醒",
+      "file": "./MI-029-monitoring-changes.md",
+      "priority": "P2",
+      "prd_milestone": "规模化版本",
+      "depends_on": [
+        "MI-024"
+      ],
+      "wave": 13,
+      "features": [
+        "F16"
+      ],
+      "acceptance_cases": [
+        "T15",
+        "T16",
+        "T20",
+        "T21"
+      ],
+      "role": "持续研究",
+      "integration_owner": "本单在 P2 分支集成",
+      "status": "deferred",
+      "owned_paths": [
+        "gpt_researcher/market_insight/monitoring.py",
+        "gpt_researcher/market_insight/change_analysis.py",
+        "backend/server/insight/monitors.py",
+        "frontend/nextjs/components/insight/MonitorSettings.tsx",
+        "tests/market_insight/test_monitoring.py"
+      ]
+    }
+  ]
+}
